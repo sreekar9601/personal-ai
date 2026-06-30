@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .. import config
-from ..hooks import resolve_in_repo
+from ..hooks import assess_content, resolve_in_repo
 
 
 def read_vault(rel_path: str) -> str:
@@ -46,6 +46,9 @@ def write_vault(rel_path: str, content: str) -> str:
     """
     if config.KILL_SWITCH:
         return "[blocked] KILL_SWITCH is on; writes are disabled."
+    refusal = assess_content(content)
+    if refusal:
+        return f"[refused] {refusal}"
     path = resolve_in_repo(rel_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content)
@@ -56,6 +59,9 @@ def append_vault(rel_path: str, content: str) -> str:
     """Append text to a repo-relative path (used for logs like vault/log.md)."""
     if config.KILL_SWITCH:
         return "[blocked] KILL_SWITCH is on; writes are disabled."
+    refusal = assess_content(content)
+    if refusal:
+        return f"[refused] {refusal}"
     path = resolve_in_repo(rel_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a") as f:

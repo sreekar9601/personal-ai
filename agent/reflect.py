@@ -39,7 +39,9 @@ def recent_log(limit: int = 60) -> str:
 def _skills_inventory() -> str:
     if not config.SKILLS_DIR.is_dir():
         return "(no skills yet)"
-    skills = sorted(p.name for p in config.SKILLS_DIR.glob("*.md"))
+    skills = sorted(
+        p.name for p in config.SKILLS_DIR.glob("*.md") if p.name.lower() != "readme.md"
+    )
     return "\n".join(f"- {s}" for s in skills) or "(no skills yet)"
 
 

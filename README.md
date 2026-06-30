@@ -3,12 +3,21 @@
 A single personal agent over one git-backed knowledge repo, reachable via
 Telegram. Model-agnostic (Pydantic AI), Obsidian as the editing surface.
 
-**Phase 0:** capture ideas + generate specs from your phone, with
-approval-gated writes, SQLite+FTS memory, tier-routed models, and git as sync.
+It captures ideas, synthesises them into a personal wiki, tracks a job search,
+answers questions about your spending, briefs you each morning, and improves its
+own playbooks — all over plain files in one git repo, with approval-gated writes.
 
-**Phase 1 (this):** the knowledge engine — a wiki **synthesis loop** that folds
-raw captures into a durable, cross-linked wiki; **keyword retrieval** (FTS) over
-the whole vault; and an active **memory layer** the agent grows as it learns.
+**Build phases (all shipped):**
+
+| Phase | What it adds |
+|---|---|
+| 0 — core | Capture + spec writing, approval-gated writes, SQLite+FTS memory, tier-routed models, git as sync. |
+| 1 — knowledge engine | Wiki **synthesis loop**, **keyword retrieval** (FTS over the vault), active **memory layer**. |
+| 2 — job search | File-based CRM + application tracker, resume/cover tailoring. |
+| 3 — finance | CSV import → categorised ledger → **DuckDB** spending queries. |
+| 4 — proactive | Scheduled nightly synthesis + a morning **briefing** on Telegram. |
+| 5 — self-improvement | A **reflection loop** that writes its own reusable skills. |
+| 6 — hardening | Content guards, an audit trail, and a pytest suite. |
 
 ## Quickstart
 
@@ -29,29 +38,44 @@ the whole vault; and an active **memory layer** the agent grows as it learns.
    ```bash
    uv run python -m agent.main
    ```
-4. **Use it from Telegram:**
-   - Send any text → it's captured as a note in `vault/00-inbox/`. Ask a
-     question → it's answered, grounded in the vault via keyword search.
-   - `/spec <idea>` → a full spec written to `vault/01-projects/` (strong tier).
-   - `/synthesize` → runs the wiki synthesis loop: distills the raw captures in
-     `vault/00-inbox/` into deduplicated, cross-linked pages under
-     `vault/03-resources/`, updates `vault/index.md`, and archives the captures.
-   - Writes outside `vault/ skills/ playbooks/ memory/ finance/transactions/`
-     trigger an Approve/Deny button — that's the safety gate, not a bug.
+4. **Use it from Telegram** — send any text to capture it (questions get answered,
+   grounded in the vault), or use a command:
 
-## The knowledge engine (Phase 1)
+   | Command | Does |
+   |---|---|
+   | `/spec <idea>` | Write a full spec to `vault/01-projects/` (strong tier). |
+   | `/synthesize` | Fold inbox captures into the `vault/03-resources/` wiki. |
+   | `/job <text>` | Track an application / status / prep in the CRM. |
+   | `/import` | Import new CSVs from `finance/imports/` into the ledger. |
+   | `/finance [YYYY-MM]` | Spending summary by category. |
+   | `/briefing` | The morning briefing on demand. |
+   | `/reflect` | Run a self-improvement pass over recent activity. |
 
-- **Synthesis (the "Karpathy loop").** Capture is raw and lossy; `/synthesize`
-  folds those captures into a small, durable wiki — one page per *topic*, merged
-  and cross-linked, not one page per note. Driven by `playbooks/synthesis.md`;
-  it never deletes, it archives processed captures to `vault/04-archive/`.
-- **Keyword retrieval.** Every markdown file in `vault/` is indexed in SQLite
-  FTS5. The agent's `vault_search` tool finds relevant pages so answers are
-  grounded in what's written. The index rebuilds on startup and stays fresh on
-  every write/move.
-- **Memory layer.** `memory/USER.md` (who you are) and `memory/MEMORY.md`
-  (durable facts) ride in every prompt. The agent grows `MEMORY.md` itself via
-  the `remember` tool when it learns a stable fact.
+   Writes outside `vault/ skills/ playbooks/ memory/ finance/transactions/`
+   trigger an Approve/Deny button — that's the safety gate, not a bug.
+
+## How it works
+
+- **Knowledge engine (Phase 1).** `/synthesize` runs the "Karpathy loop": it
+  folds raw captures into a small, durable wiki — one page per *topic*, merged
+  and cross-linked, never deleted (processed captures move to `vault/04-archive/`).
+  Every markdown file in `vault/` is indexed in SQLite FTS5; the `vault_search`
+  tool grounds answers in what's written. `memory/USER.md` + `memory/MEMORY.md`
+  ride in every prompt, and the agent grows `MEMORY.md` via the `remember` tool.
+- **Job search (Phase 2).** The vault is the CRM: `vault/crm/applications.md` is
+  a pipeline table, `vault/crm/<company>.md` a page each. Resume/cover tailoring
+  works strictly from your real master resume — no fabrication.
+- **Finance (Phase 3).** Drop bank/card CSVs in `finance/imports/` and `/import`:
+  columns are detected, amounts normalised (spend<0, income>0), transactions
+  categorised by `finance/categories.yaml` rules and de-duped into
+  `finance/transactions/ledger.csv`. The `finance_query` tool answers money
+  questions with read-only DuckDB SQL. Raw exports never enter git.
+- **Proactive (Phase 4).** The scheduler runs a nightly synthesis pass and a
+  morning briefing (inbox backlog, job next-actions, month-to-date spend) pushed
+  to Telegram. Configure with `PROACTIVE_ENABLED` / `*_HOUR` in `.env`.
+- **Self-improvement (Phase 5).** `/reflect` reviews recent activity and writes
+  one reusable skill into `skills/` (or sharpens a playbook). It can touch
+  `skills/` and `playbooks/` but never `agent/` code — that stays PR-gated.
 
 ## Editing the vault
 
@@ -63,12 +87,22 @@ Obsidian Git plugin to pull the agent's commits to your desktop.
 Edit `agent/models.yaml` — change `provider` and the three tier model strings.
 No Python changes. (Set the matching provider API key in `.env`.)
 
-## Safety model (Phase 0)
+## Safety model
 
 - **Kill switch:** `KILL_SWITCH=true` disables all writes + git push.
 - **Approval gate:** writes outside the allowlist need a Telegram confirmation.
 - **Path safety:** any path escaping the repo root is refused.
-- **Audit:** every turn commits knowledge changes to git; `vault/log.md` logs actions.
+- **Content guards (Phase 6):** oversized writes and private-key material are
+  refused outright, even inside the auto-approve zone.
+- **Read-only finance:** `finance_query` rejects anything but a single SELECT/WITH.
+- **Audit:** every turn commits knowledge changes to git and logs to
+  `vault/log.md`; side-effectful tool calls also append to `.data/audit.log`.
 
-See the master build plan for Phases 1–6 (knowledge engine, job search, finance,
-proactive, self-improvement, hardening).
+## Tests
+
+```bash
+uv run --group dev pytest
+```
+
+Covers path safety + content guards, vault retrieval, the memory layer, finance
+import/categorisation/query guards, and the briefing — no network or model calls.

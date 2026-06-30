@@ -25,7 +25,7 @@ from pydantic_ai import (
     UsageLimits,
 )
 
-from . import config, finance, memory, providers, retrieval
+from . import audit, config, finance, memory, providers, retrieval
 from .hooks import PathNotAllowed, is_auto_approved, resolve_in_repo
 from .tools import vault as vault_tools
 
@@ -128,6 +128,7 @@ def vault_write(ctx: RunContext[None], rel_path: str, content: str) -> str:
         raise ApprovalRequired()
     result = vault_tools.write_vault(rel_path, content)
     retrieval.index_file(rel_path)  # keep keyword retrieval in sync
+    audit.record("vault_write", {"rel_path": rel_path, "content": content}, result[:20])
     return result
 
 
@@ -143,6 +144,7 @@ def vault_append(ctx: RunContext[None], rel_path: str, content: str) -> str:
         raise ApprovalRequired()
     result = vault_tools.append_vault(rel_path, content)
     retrieval.index_file(rel_path)  # keep keyword retrieval in sync
+    audit.record("vault_append", {"rel_path": rel_path, "content": content}, result[:20])
     return result
 
 
@@ -162,6 +164,7 @@ def vault_move(ctx: RunContext[None], src_rel: str, dst_rel: str) -> str:
     if result.startswith("[moved]"):
         retrieval.remove_file(src_rel)
         retrieval.index_file(dst_rel)
+    audit.record("vault_move", {"src": src_rel, "dst": dst_rel}, result[:20])
     return result
 
 
@@ -183,7 +186,9 @@ def remember(fact: str) -> str:
     every future turn. Use sparingly for *stable* facts (preferences, ongoing
     projects, key people), not transient chatter or anything you'd capture as a
     note. One concise fact per call."""
-    return memory.add_fact(fact)
+    result = memory.add_fact(fact)
+    audit.record("remember", {"fact": fact}, result[:20])
+    return result
 
 
 @agent.tool_plain
@@ -195,7 +200,9 @@ def finance_query(sql: str) -> str:
     try:
         rows = finance.query(sql)
     except finance.FinanceError as e:
+        audit.record("finance_query", {"sql": sql}, "refused")
         return f"[refused] {e}"
+    audit.record("finance_query", {"sql": sql}, f"ok:{len(rows)}rows")
     if not rows:
         return "[no rows]"
     cols = list(rows[0].keys())
