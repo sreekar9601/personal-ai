@@ -25,7 +25,7 @@ from pydantic_ai import (
     UsageLimits,
 )
 
-from . import config, memory, providers
+from . import config, memory, providers, retrieval
 from .hooks import PathNotAllowed, is_auto_approved, resolve_in_repo
 from .tools import vault as vault_tools
 
@@ -126,7 +126,9 @@ def vault_write(ctx: RunContext[None], rel_path: str, content: str) -> str:
         return f"[refused] {e}"
     if not is_auto_approved(abs_path) and not ctx.tool_call_approved:
         raise ApprovalRequired()
-    return vault_tools.write_vault(rel_path, content)
+    result = vault_tools.write_vault(rel_path, content)
+    retrieval.index_file(rel_path)  # keep keyword retrieval in sync
+    return result
 
 
 @agent.tool
@@ -139,7 +141,49 @@ def vault_append(ctx: RunContext[None], rel_path: str, content: str) -> str:
         return f"[refused] {e}"
     if not is_auto_approved(abs_path) and not ctx.tool_call_approved:
         raise ApprovalRequired()
-    return vault_tools.append_vault(rel_path, content)
+    result = vault_tools.append_vault(rel_path, content)
+    retrieval.index_file(rel_path)  # keep keyword retrieval in sync
+    return result
+
+
+@agent.tool
+def vault_move(ctx: RunContext[None], src_rel: str, dst_rel: str) -> str:
+    """Move/rename a file within the repo, e.g. archive a processed capture:
+    'vault/00-inbox/x.md' -> 'vault/04-archive/x.md'. The destination follows
+    the same approval rules as vault_write."""
+    try:
+        resolve_in_repo(src_rel)
+        dst_abs = resolve_in_repo(dst_rel)
+    except PathNotAllowed as e:
+        return f"[refused] {e}"
+    if not is_auto_approved(dst_abs) and not ctx.tool_call_approved:
+        raise ApprovalRequired()
+    result = vault_tools.move_vault(src_rel, dst_rel)
+    if result.startswith("[moved]"):
+        retrieval.remove_file(src_rel)
+        retrieval.index_file(dst_rel)
+    return result
+
+
+@agent.tool_plain
+def vault_search(query: str) -> str:
+    """Keyword search across the knowledge vault (notes + synthesised wiki). Use
+    this to ground answers in what's actually written before replying, and to
+    find the existing page a new capture belongs to. Returns path + snippet per
+    hit; follow up with vault_read for the full text."""
+    hits = retrieval.search_vault(query)
+    if not hits:
+        return "[no matches]"
+    return "\n".join(f"- {h['path']} — {h['title']}\n    {h['snippet']}" for h in hits)
+
+
+@agent.tool_plain
+def remember(fact: str) -> str:
+    """Record a durable fact about the user to memory/MEMORY.md so it is known in
+    every future turn. Use sparingly for *stable* facts (preferences, ongoing
+    projects, key people), not transient chatter or anything you'd capture as a
+    note. One concise fact per call."""
+    return memory.add_fact(fact)
 
 
 @agent.tool_plain

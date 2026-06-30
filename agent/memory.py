@@ -102,3 +102,37 @@ def read_user() -> str:
 
 def read_memory() -> str:
     return _read(config.MEMORY_MD)
+
+
+# --- Durable facts (the active memory layer) ---------------------------------
+# Phase 0 only *read* MEMORY.md. Phase 1 lets the agent grow it: when it learns
+# a stable fact about the user (during chat or wiki synthesis) it records one
+# line here, which then rides in the system prefix of every future turn.
+_PLACEHOLDER = "- (no durable facts yet)"
+
+
+def add_fact(fact: str) -> str:
+    """Append a one-line durable fact to memory/MEMORY.md (idempotent-ish).
+
+    Strips the seed placeholder on first real fact, normalises to a single
+    bullet, and skips exact duplicates so the layer doesn't bloat over time.
+    """
+    if config.KILL_SWITCH:
+        return "[blocked] KILL_SWITCH is on; memory writes are disabled."
+    fact = " ".join(fact.strip().lstrip("-").split())
+    if not fact:
+        return "[skipped] empty fact"
+
+    path = config.MEMORY_MD
+    existing = path.read_text() if path.exists() else ""
+    lines = existing.splitlines()
+    bullets = {ln.strip().lstrip("-").strip() for ln in lines if ln.strip().startswith("-")}
+    if fact in bullets:
+        return f"[known] already recorded: {fact}"
+
+    kept = [ln for ln in lines if ln.strip() != _PLACEHOLDER]
+    body = "\n".join(kept).rstrip()
+    body = (body + "\n" if body else "") + f"- {fact}\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body)
+    return f"[remembered] {fact}"
