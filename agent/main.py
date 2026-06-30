@@ -6,8 +6,9 @@ Surface:
   - /synthesize       -> strong-tier wiki synthesis pass over the inbox (Phase 1)
   - inline buttons    -> approve/deny writes outside the auto-approve allowlist
 
-Access is restricted to TELEGRAM_ALLOWED_USER_IDS. The scheduler is wired but
-idle until Phase 4 (which will run /synthesize on a daily cadence).
+Access is restricted to TELEGRAM_ALLOWED_USER_IDS. The scheduler runs the Phase 4
+proactive jobs: a nightly synthesis pass and a morning briefing (see
+agent/scheduler.py), both gated by PROACTIVE_ENABLED.
 """
 from __future__ import annotations
 
@@ -25,7 +26,18 @@ from telegram.ext import (
     filters,
 )
 
-from . import config, finance, jobs, loop, memory, providers, retrieval, synthesis
+from . import (
+    briefing,
+    config,
+    finance,
+    jobs,
+    loop,
+    memory,
+    providers,
+    retrieval,
+    scheduler as scheduler_jobs,
+    synthesis,
+)
 from .loop import TurnResult
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -174,6 +186,20 @@ async def on_finance(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await update.effective_message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 
+async def on_briefing(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _authorized(update):
+        return
+    try:
+        text = briefing.build()
+    except Exception as e:
+        await update.effective_message.reply_text(f"⚠️ {type(e).__name__}: {e}")
+        return
+    from . import gitsync
+
+    gitsync.commit_knowledge("journal: briefing (on demand)")
+    await update.effective_message.reply_text(text)
+
+
 async def on_synthesize(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not _authorized(update):
         return
@@ -237,12 +263,14 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("job", on_job))
     app.add_handler(CommandHandler("import", on_import))
     app.add_handler(CommandHandler("finance", on_finance))
+    app.add_handler(CommandHandler("briefing", on_briefing))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
 
-    # Scheduler is wired now, idle until Phase 4 adds jobs.
+    # Scheduler runs the Phase 4 proactive jobs (nightly synthesis + briefing).
     scheduler = AsyncIOScheduler()
     scheduler.start()
+    scheduler_jobs.register(scheduler, app.bot)
     app.bot_data["scheduler"] = scheduler
     return app
 
