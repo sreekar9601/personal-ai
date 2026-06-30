@@ -79,6 +79,7 @@ GIT_PUSH = (_env("GIT_PUSH", "false") or "").lower() in {"1", "true", "yes", "on
 PROACTIVE_ENABLED = (_env("PROACTIVE_ENABLED", "true") or "").lower() in {"1", "true", "yes", "on"}
 SYNTHESIS_HOUR = int(_env("SYNTHESIS_HOUR", "3"))   # nightly inbox -> wiki
 BRIEFING_HOUR = int(_env("BRIEFING_HOUR", "8"))     # morning briefing
+REFLECT_HOUR = int(_env("REFLECT_HOUR", "4"))       # weekly (Sun) self-improvement
 # Chat to push proactive messages to. Defaults to the (single) allowed user id —
 # in a private chat the chat id equals the user id.
 _chat = _env("TELEGRAM_CHAT_ID")

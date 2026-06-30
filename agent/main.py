@@ -34,6 +34,7 @@ from . import (
     loop,
     memory,
     providers,
+    reflect,
     retrieval,
     scheduler as scheduler_jobs,
     synthesis,
@@ -213,6 +214,19 @@ async def on_synthesize(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await _deliver(update, result)
 
 
+async def on_reflect(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _authorized(update):
+        return
+    await ctx.bot.send_chat_action(update.effective_chat.id, "typing")
+    try:
+        result = await reflect.reflect(_session_id(update))
+    except Exception as e:
+        log.exception("reflect failed")
+        await update.effective_message.reply_text(f"⚠️ {type(e).__name__}: {e}")
+        return
+    await _deliver(update, result)
+
+
 async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not _authorized(update):
         return
@@ -264,6 +278,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("import", on_import))
     app.add_handler(CommandHandler("finance", on_finance))
     app.add_handler(CommandHandler("briefing", on_briefing))
+    app.add_handler(CommandHandler("reflect", on_reflect))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
 

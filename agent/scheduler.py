@@ -15,11 +15,12 @@ import logging
 
 from apscheduler.triggers.cron import CronTrigger
 
-from . import briefing, config, gitsync, synthesis
+from . import briefing, config, gitsync, reflect, synthesis
 
 log = logging.getLogger("personal-ai.scheduler")
 
 _SYNTH_SESSION = "cron:synthesis"
+_REFLECT_SESSION = "cron:reflect"
 
 
 async def _nightly_synthesis() -> None:
@@ -30,6 +31,21 @@ async def _nightly_synthesis() -> None:
         log.info("nightly synthesis: %s", (result.text or "")[:120])
     except Exception:  # never let a job crash the scheduler
         log.exception("nightly synthesis failed")
+
+
+def _make_reflect_job(bot, chat_id: int):
+    async def _weekly_reflection() -> None:
+        if config.KILL_SWITCH:
+            return
+        try:
+            result = await reflect.reflect(_REFLECT_SESSION)
+            if result.text:
+                await bot.send_message(chat_id, f"🧠 Weekly reflection:\n{result.text}")
+            log.info("weekly reflection done")
+        except Exception:
+            log.exception("weekly reflection failed")
+
+    return _weekly_reflection
 
 
 def _make_briefing_job(bot, chat_id: int):
@@ -66,8 +82,16 @@ def register(scheduler, bot) -> bool:
         id="morning_briefing",
         replace_existing=True,
     )
+    scheduler.add_job(
+        _make_reflect_job(bot, config.TELEGRAM_CHAT_ID),
+        CronTrigger(day_of_week="sun", hour=config.REFLECT_HOUR, minute=13),
+        id="weekly_reflection",
+        replace_existing=True,
+    )
     log.info(
-        "proactive jobs armed: synthesis @%02d:07, briefing @%02d:02 -> chat %s",
-        config.SYNTHESIS_HOUR, config.BRIEFING_HOUR, config.TELEGRAM_CHAT_ID,
+        "proactive jobs armed: synthesis @%02d:07, briefing @%02d:02, "
+        "reflection Sun @%02d:13 -> chat %s",
+        config.SYNTHESIS_HOUR, config.BRIEFING_HOUR, config.REFLECT_HOUR,
+        config.TELEGRAM_CHAT_ID,
     )
     return True
