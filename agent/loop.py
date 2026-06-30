@@ -25,7 +25,7 @@ from pydantic_ai import (
     UsageLimits,
 )
 
-from . import config, memory, providers, retrieval
+from . import config, finance, memory, providers, retrieval
 from .hooks import PathNotAllowed, is_auto_approved, resolve_in_repo
 from .tools import vault as vault_tools
 
@@ -184,6 +184,25 @@ def remember(fact: str) -> str:
     projects, key people), not transient chatter or anything you'd capture as a
     note. One concise fact per call."""
     return memory.add_fact(fact)
+
+
+@agent.tool_plain
+def finance_query(sql: str) -> str:
+    """Run a READ-ONLY SQL query (SELECT/WITH only) over the finance ledger to
+    answer money questions. The table is a view named `ledger` with columns:
+    id, date (DATE), description, amount (DOUBLE; spend<0, income>0), category,
+    account, source. See playbooks/finance.md. Returns rows as text."""
+    try:
+        rows = finance.query(sql)
+    except finance.FinanceError as e:
+        return f"[refused] {e}"
+    if not rows:
+        return "[no rows]"
+    cols = list(rows[0].keys())
+    lines = [" | ".join(cols)]
+    for r in rows:
+        lines.append(" | ".join(str(r.get(c, "")) for c in cols))
+    return "\n".join(lines)
 
 
 @agent.tool_plain

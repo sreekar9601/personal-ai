@@ -25,7 +25,7 @@ from telegram.ext import (
     filters,
 )
 
-from . import config, jobs, loop, memory, providers, retrieval, synthesis
+from . import config, finance, jobs, loop, memory, providers, retrieval, synthesis
 from .loop import TurnResult
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -138,6 +138,42 @@ async def on_job(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await _deliver(update, result)
 
 
+async def on_import(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _authorized(update):
+        return
+    res = finance.import_new()
+    if res.get("blocked"):
+        await update.effective_message.reply_text("KILL_SWITCH is on; import disabled.")
+        return
+    from . import gitsync
+
+    gitsync.commit_knowledge("finance: import transactions")
+    await update.effective_message.reply_text(
+        f"Imported {res['files']} file(s): {res['added']} new transaction(s), "
+        f"{res['skipped']} duplicate(s) skipped."
+    )
+
+
+async def on_finance(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _authorized(update):
+        return
+    month = ctx.args[0] if ctx.args else None  # 'YYYY-MM' or omitted = all-time
+    try:
+        s = finance.summary(month)
+    except Exception as e:
+        await update.effective_message.reply_text(f"⚠️ {type(e).__name__}: {e}")
+        return
+    t = s["totals"]
+    lines = [f"*Finance — {s['period']}*"]
+    if t.get("spent") is None and not s["by_category"]:
+        lines.append("\nLedger is empty. Drop a CSV in `finance/imports/` and /import.")
+    else:
+        lines.append(f"Spent: {t.get('spent') or 0} · Income: {t.get('income') or 0}\n")
+        for r in s["by_category"]:
+            lines.append(f"• {r['category']}: {r['net']} ({r['n']})")
+    await update.effective_message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
 async def on_synthesize(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not _authorized(update):
         return
@@ -199,6 +235,8 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("spec", on_spec))
     app.add_handler(CommandHandler("synthesize", on_synthesize))
     app.add_handler(CommandHandler("job", on_job))
+    app.add_handler(CommandHandler("import", on_import))
+    app.add_handler(CommandHandler("finance", on_finance))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
 
