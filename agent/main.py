@@ -24,7 +24,7 @@ from telegram.ext import (
     filters,
 )
 
-from . import config, loop, memory
+from . import config, loop, memory, providers
 from .loop import TurnResult
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -143,6 +143,18 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 def build_app() -> Application:
     if not config.TELEGRAM_BOT_TOKEN:
         raise SystemExit("TELEGRAM_BOT_TOKEN is not set. Copy .env.example to .env.")
+    _provider_keys = {
+        "anthropic": config.ANTHROPIC_API_KEY,
+        "openai": config.OPENAI_API_KEY,
+        "gemini": config.GEMINI_API_KEY,
+    }
+    if not _provider_keys.get(providers.provider_name()):
+        raise SystemExit(
+            f"No API key for provider '{providers.provider_name()}'. "
+            "Set it in .env (see .env.example)."
+        )
+    if not config.TELEGRAM_ALLOWED_USER_IDS:
+        log.warning("TELEGRAM_ALLOWED_USER_IDS is empty — the bot is OPEN to anyone.")
     memory.init_db()
     app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", on_start))

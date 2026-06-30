@@ -88,6 +88,9 @@ agent: Agent = Agent(
     output_type=[str, DeferredToolRequests],
     instructions=_build_instructions,
     retries=2,
+    # Defer provider/model construction until first run so importing the module
+    # (and the entrypoint's env checks) works without ANTHROPIC_API_KEY set.
+    defer_model_check=True,
 )
 
 
