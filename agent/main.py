@@ -1,12 +1,13 @@
 """Entrypoint: Telegram bot (+ scheduler placeholder) forwarding to the agent.
 
-Phase 0 surface:
-  - any text message  -> default-tier turn (capture / chat)
+Surface:
+  - any text message  -> default-tier turn (capture / chat, with vault retrieval)
   - /spec <idea>      -> strong-tier turn that writes a spec to vault/01-projects/
+  - /synthesize       -> strong-tier wiki synthesis pass over the inbox (Phase 1)
   - inline buttons    -> approve/deny writes outside the auto-approve allowlist
 
 Access is restricted to TELEGRAM_ALLOWED_USER_IDS. The scheduler is wired but
-idle until Phase 4.
+idle until Phase 4 (which will run /synthesize on a daily cadence).
 """
 from __future__ import annotations
 
@@ -24,7 +25,7 @@ from telegram.ext import (
     filters,
 )
 
-from . import config, loop, memory, providers
+from . import config, loop, memory, providers, retrieval, synthesis
 from .loop import TurnResult
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -79,7 +80,8 @@ async def on_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not _authorized(update):
         return
     await update.effective_message.reply_text(
-        "Personal AI online. Send an idea to capture it, or /spec <idea> for a full spec."
+        "Personal AI online. Send an idea to capture it, /spec <idea> for a full"
+        " spec, or /synthesize to fold the inbox into the wiki."
     )
 
 
@@ -111,6 +113,19 @@ async def on_spec(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         )
     except Exception as e:
         log.exception("spec failed")
+        await update.effective_message.reply_text(f"⚠️ {type(e).__name__}: {e}")
+        return
+    await _deliver(update, result)
+
+
+async def on_synthesize(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _authorized(update):
+        return
+    await ctx.bot.send_chat_action(update.effective_chat.id, "typing")
+    try:
+        result = await synthesis.synthesize(_session_id(update))
+    except Exception as e:
+        log.exception("synthesis failed")
         await update.effective_message.reply_text(f"⚠️ {type(e).__name__}: {e}")
         return
     await _deliver(update, result)
@@ -156,9 +171,13 @@ def build_app() -> Application:
     if not config.TELEGRAM_ALLOWED_USER_IDS:
         log.warning("TELEGRAM_ALLOWED_USER_IDS is empty — the bot is OPEN to anyone.")
     memory.init_db()
+    retrieval.init_db()
+    n = retrieval.reindex_vault()  # build the keyword index from the vault on disk
+    log.info("Vault keyword index ready (%d files).", n)
     app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", on_start))
     app.add_handler(CommandHandler("spec", on_spec))
+    app.add_handler(CommandHandler("synthesize", on_synthesize))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
 

@@ -61,3 +61,22 @@ def append_vault(rel_path: str, content: str) -> str:
     with open(path, "a") as f:
         f.write(content if content.endswith("\n") else content + "\n")
     return f"[appended] {rel_path}"
+
+
+def move_vault(src_rel: str, dst_rel: str) -> str:
+    """Move/rename a file within the repo (used by synthesis to archive captures).
+
+    Both paths are confined to the repo; the approval gate (loop.py) governs the
+    destination just like a write. Kill-switch aware.
+    """
+    if config.KILL_SWITCH:
+        return "[blocked] KILL_SWITCH is on; moves are disabled."
+    src = resolve_in_repo(src_rel)
+    dst = resolve_in_repo(dst_rel)
+    if not src.exists():
+        return f"[not found] {src_rel}"
+    if src.is_dir():
+        return f"[refused] {src_rel} is a directory; only files can be moved."
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    src.rename(dst)
+    return f"[moved] {src_rel} -> {dst_rel}"

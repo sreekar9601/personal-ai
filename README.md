@@ -3,8 +3,12 @@
 A single personal agent over one git-backed knowledge repo, reachable via
 Telegram. Model-agnostic (Pydantic AI), Obsidian as the editing surface.
 
-**Phase 0 (this):** capture ideas + generate specs from your phone, with
+**Phase 0:** capture ideas + generate specs from your phone, with
 approval-gated writes, SQLite+FTS memory, tier-routed models, and git as sync.
+
+**Phase 1 (this):** the knowledge engine — a wiki **synthesis loop** that folds
+raw captures into a durable, cross-linked wiki; **keyword retrieval** (FTS) over
+the whole vault; and an active **memory layer** the agent grows as it learns.
 
 ## Quickstart
 
@@ -26,10 +30,28 @@ approval-gated writes, SQLite+FTS memory, tier-routed models, and git as sync.
    uv run python -m agent.main
    ```
 4. **Use it from Telegram:**
-   - Send any text → it's captured as a note in `vault/00-inbox/`.
+   - Send any text → it's captured as a note in `vault/00-inbox/`. Ask a
+     question → it's answered, grounded in the vault via keyword search.
    - `/spec <idea>` → a full spec written to `vault/01-projects/` (strong tier).
+   - `/synthesize` → runs the wiki synthesis loop: distills the raw captures in
+     `vault/00-inbox/` into deduplicated, cross-linked pages under
+     `vault/03-resources/`, updates `vault/index.md`, and archives the captures.
    - Writes outside `vault/ skills/ playbooks/ memory/ finance/transactions/`
      trigger an Approve/Deny button — that's the safety gate, not a bug.
+
+## The knowledge engine (Phase 1)
+
+- **Synthesis (the "Karpathy loop").** Capture is raw and lossy; `/synthesize`
+  folds those captures into a small, durable wiki — one page per *topic*, merged
+  and cross-linked, not one page per note. Driven by `playbooks/synthesis.md`;
+  it never deletes, it archives processed captures to `vault/04-archive/`.
+- **Keyword retrieval.** Every markdown file in `vault/` is indexed in SQLite
+  FTS5. The agent's `vault_search` tool finds relevant pages so answers are
+  grounded in what's written. The index rebuilds on startup and stays fresh on
+  every write/move.
+- **Memory layer.** `memory/USER.md` (who you are) and `memory/MEMORY.md`
+  (durable facts) ride in every prompt. The agent grows `MEMORY.md` itself via
+  the `remember` tool when it learns a stable fact.
 
 ## Editing the vault
 
