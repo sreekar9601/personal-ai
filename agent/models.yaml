@@ -1,0 +1,29 @@
+# The one switch point for model choice.
+#
+# `provider` selects the vendor. Each tier maps to a Pydantic AI model string
+# (`<provider>:<model>`). Change `provider` and the three model strings to move
+# the whole agent to Gemini or OpenAI — no Python changes.
+#
+# Tiers:
+#   cheap   -> categorization, capture triage, the approval classifier
+#   default -> chat, drafting, CRM, wiki synthesis
+#   strong  -> idea->spec, deep synthesis, hard reasoning
+#
+# Model names churn; verify against each provider's console before switching.
+
+provider: anthropic
+
+tiers:
+  cheap: anthropic:claude-haiku-4-5
+  default: anthropic:claude-sonnet-4-6
+  strong: anthropic:claude-opus-4-8
+
+# Reference mappings for the other providers (uncomment + set provider above).
+# gemini:
+#   cheap: google-gla:gemini-3-flash
+#   default: google-gla:gemini-3-pro
+#   strong: google-gla:gemini-3-pro
+# openai:
+#   cheap: openai:gpt-5-mini
+#   default: openai:gpt-5.2
+#   strong: openai:gpt-5.5

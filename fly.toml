@@ -1,0 +1,29 @@
+# Fly.io deployment for the personal-ai service.
+# `fly launch --no-deploy` to create the app, set secrets, then `fly deploy`.
+#
+#   fly secrets set TELEGRAM_BOT_TOKEN=... ANTHROPIC_API_KEY=... \
+#       TELEGRAM_ALLOWED_USER_IDS=123456789
+#
+# The volume holds the git repo (vault + sqlite). The bot is long-polling, so it
+# needs no public HTTP service — keep it off the public internet.
+
+app = "personal-ai"
+primary_region = "iad"
+
+[build]
+  # Uses the Dockerfile in this directory (see Dockerfile).
+
+[env]
+  # Non-secret defaults; secrets come from `fly secrets`.
+  KILL_SWITCH = "false"
+  MAX_TURNS = "12"
+  GIT_PUSH = "true"
+
+[mounts]
+  source = "personal_ai_data"
+  destination = "/data"
+
+# No [http_service] — this is a polling worker, not a web server.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
