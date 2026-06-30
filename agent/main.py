@@ -25,7 +25,7 @@ from telegram.ext import (
     filters,
 )
 
-from . import config, loop, memory, providers, retrieval, synthesis
+from . import config, jobs, loop, memory, providers, retrieval, synthesis
 from .loop import TurnResult
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -118,6 +118,26 @@ async def on_spec(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await _deliver(update, result)
 
 
+async def on_job(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _authorized(update):
+        return
+    text = " ".join(ctx.args) if ctx.args else ""
+    if not text:
+        await update.effective_message.reply_text(
+            "Usage: /job <posting, status update, or question>\n"
+            "e.g. /job applied to Acme as Staff Eng — link …"
+        )
+        return
+    await ctx.bot.send_chat_action(update.effective_chat.id, "typing")
+    try:
+        result = await jobs.track(_session_id(update), text)
+    except Exception as e:
+        log.exception("job failed")
+        await update.effective_message.reply_text(f"⚠️ {type(e).__name__}: {e}")
+        return
+    await _deliver(update, result)
+
+
 async def on_synthesize(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not _authorized(update):
         return
@@ -178,6 +198,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("start", on_start))
     app.add_handler(CommandHandler("spec", on_spec))
     app.add_handler(CommandHandler("synthesize", on_synthesize))
+    app.add_handler(CommandHandler("job", on_job))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
 
