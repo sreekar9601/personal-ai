@@ -1,0 +1,17 @@
+# Keyword → category rules for transaction categorisation (Phase 3).
+# A transaction's description is matched (case-insensitive substring) against
+# each category's keywords, top to bottom; first hit wins, else "uncategorized".
+# The agent may refine these via the finance playbook. Order matters: put more
+# specific categories above broad ones.
+
+income: [payroll, salary, direct dep, "direct deposit", interest paid]
+rent: [rent, landlord, property mgmt, leasing]
+utilities: ["pg&e", comcast, xfinity, "at&t", verizon, "t-mobile", electric, water, gas company]
+subscriptions: [netflix, spotify, hulu, "disney+", youtube premium, github, openai, anthropic, icloud, "amazon prime", patreon]
+groceries: [whole foods, trader joe, safeway, kroger, grocery, aldi, costco, sprouts, "h-e-b", wegmans]
+dining: [restaurant, cafe, coffee, starbucks, doordash, "uber eats", grubhub, chipotle, mcdonald, bar &, tavern, pizzeria]
+transport: [uber, lyft, shell, chevron, exxon, "gas station", transit, bart, caltrain, parking, toll]
+shopping: [amazon, target, walmart, ebay, best buy, etsy, "apple store"]
+health: [pharmacy, cvs, walgreens, doctor, clinic, dental, "blue cross", kaiser, copay]
+travel: [airline, hotel, airbnb, united air, delta air, southwest, expedia, marriott, hilton]
+fees: ["service fee", "atm fee", "overdraft", "late fee", "annual fee", "foreign transaction"]

@@ -71,3 +71,19 @@ MAX_TURNS = int(_env("MAX_TURNS", "12"))
 
 # Push to git remote after committing (best-effort; needs an 'origin' remote).
 GIT_PUSH = (_env("GIT_PUSH", "false") or "").lower() in {"1", "true", "yes", "on"}
+
+# --- Proactive scheduling (Phase 4) -----------------------------------------
+# When enabled, the agent runs unattended jobs: a nightly wiki-synthesis pass and
+# a morning briefing pushed to you on Telegram. Disabled if there's no chat to
+# message. Times are local-hour ints; minutes are nudged off :00 to spread load.
+PROACTIVE_ENABLED = (_env("PROACTIVE_ENABLED", "true") or "").lower() in {"1", "true", "yes", "on"}
+SYNTHESIS_HOUR = int(_env("SYNTHESIS_HOUR", "3"))   # nightly inbox -> wiki
+BRIEFING_HOUR = int(_env("BRIEFING_HOUR", "8"))     # morning briefing
+REFLECT_HOUR = int(_env("REFLECT_HOUR", "4"))       # weekly (Sun) self-improvement
+# Chat to push proactive messages to. Defaults to the (single) allowed user id —
+# in a private chat the chat id equals the user id.
+_chat = _env("TELEGRAM_CHAT_ID")
+TELEGRAM_CHAT_ID = (
+    int(_chat) if _chat
+    else (sorted(TELEGRAM_ALLOWED_USER_IDS)[0] if TELEGRAM_ALLOWED_USER_IDS else None)
+)

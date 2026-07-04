@@ -6,8 +6,9 @@ Surface:
   - /synthesize       -> strong-tier wiki synthesis pass over the inbox (Phase 1)
   - inline buttons    -> approve/deny writes outside the auto-approve allowlist
 
-Access is restricted to TELEGRAM_ALLOWED_USER_IDS. The scheduler is wired but
-idle until Phase 4 (which will run /synthesize on a daily cadence).
+Access is restricted to TELEGRAM_ALLOWED_USER_IDS. The scheduler runs the Phase 4
+proactive jobs: a nightly synthesis pass and a morning briefing (see
+agent/scheduler.py), both gated by PROACTIVE_ENABLED.
 """
 from __future__ import annotations
 
@@ -25,7 +26,19 @@ from telegram.ext import (
     filters,
 )
 
-from . import config, loop, memory, providers, retrieval, synthesis
+from . import (
+    briefing,
+    config,
+    finance,
+    jobs,
+    loop,
+    memory,
+    providers,
+    reflect,
+    retrieval,
+    scheduler as scheduler_jobs,
+    synthesis,
+)
 from .loop import TurnResult
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -118,6 +131,76 @@ async def on_spec(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await _deliver(update, result)
 
 
+async def on_job(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _authorized(update):
+        return
+    text = " ".join(ctx.args) if ctx.args else ""
+    if not text:
+        await update.effective_message.reply_text(
+            "Usage: /job <posting, status update, or question>\n"
+            "e.g. /job applied to Acme as Staff Eng — link …"
+        )
+        return
+    await ctx.bot.send_chat_action(update.effective_chat.id, "typing")
+    try:
+        result = await jobs.track(_session_id(update), text)
+    except Exception as e:
+        log.exception("job failed")
+        await update.effective_message.reply_text(f"⚠️ {type(e).__name__}: {e}")
+        return
+    await _deliver(update, result)
+
+
+async def on_import(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _authorized(update):
+        return
+    res = finance.import_new()
+    if res.get("blocked"):
+        await update.effective_message.reply_text("KILL_SWITCH is on; import disabled.")
+        return
+    from . import gitsync
+
+    gitsync.commit_knowledge("finance: import transactions")
+    await update.effective_message.reply_text(
+        f"Imported {res['files']} file(s): {res['added']} new transaction(s), "
+        f"{res['skipped']} duplicate(s) skipped."
+    )
+
+
+async def on_finance(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _authorized(update):
+        return
+    month = ctx.args[0] if ctx.args else None  # 'YYYY-MM' or omitted = all-time
+    try:
+        s = finance.summary(month)
+    except Exception as e:
+        await update.effective_message.reply_text(f"⚠️ {type(e).__name__}: {e}")
+        return
+    t = s["totals"]
+    lines = [f"*Finance — {s['period']}*"]
+    if t.get("spent") is None and not s["by_category"]:
+        lines.append("\nLedger is empty. Drop a CSV in `finance/imports/` and /import.")
+    else:
+        lines.append(f"Spent: {t.get('spent') or 0} · Income: {t.get('income') or 0}\n")
+        for r in s["by_category"]:
+            lines.append(f"• {r['category']}: {r['net']} ({r['n']})")
+    await update.effective_message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
+async def on_briefing(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _authorized(update):
+        return
+    try:
+        text = briefing.build()
+    except Exception as e:
+        await update.effective_message.reply_text(f"⚠️ {type(e).__name__}: {e}")
+        return
+    from . import gitsync
+
+    gitsync.commit_knowledge("journal: briefing (on demand)")
+    await update.effective_message.reply_text(text)
+
+
 async def on_synthesize(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not _authorized(update):
         return
@@ -126,6 +209,19 @@ async def on_synthesize(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         result = await synthesis.synthesize(_session_id(update))
     except Exception as e:
         log.exception("synthesis failed")
+        await update.effective_message.reply_text(f"⚠️ {type(e).__name__}: {e}")
+        return
+    await _deliver(update, result)
+
+
+async def on_reflect(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _authorized(update):
+        return
+    await ctx.bot.send_chat_action(update.effective_chat.id, "typing")
+    try:
+        result = await reflect.reflect(_session_id(update))
+    except Exception as e:
+        log.exception("reflect failed")
         await update.effective_message.reply_text(f"⚠️ {type(e).__name__}: {e}")
         return
     await _deliver(update, result)
@@ -178,12 +274,18 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("start", on_start))
     app.add_handler(CommandHandler("spec", on_spec))
     app.add_handler(CommandHandler("synthesize", on_synthesize))
+    app.add_handler(CommandHandler("job", on_job))
+    app.add_handler(CommandHandler("import", on_import))
+    app.add_handler(CommandHandler("finance", on_finance))
+    app.add_handler(CommandHandler("briefing", on_briefing))
+    app.add_handler(CommandHandler("reflect", on_reflect))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
 
-    # Scheduler is wired now, idle until Phase 4 adds jobs.
+    # Scheduler runs the Phase 4 proactive jobs (nightly synthesis + briefing).
     scheduler = AsyncIOScheduler()
     scheduler.start()
+    scheduler_jobs.register(scheduler, app.bot)
     app.bot_data["scheduler"] = scheduler
     return app
 
