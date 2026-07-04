@@ -279,19 +279,138 @@ Beyond the Phase 2 critical fixes:
 
 ---
 
-## 9. Sequencing
+## 9. End-to-end deployment: from merged PRs to a live bot
+
+Goal: **after the PRs are merged, one short bootstrap (secrets can't live in
+git) puts the bot on your phone — and every merge after that deploys itself.**
+
+### 9.1 Target architecture at go-live
+
+```
+Your phone (Telegram)
+      │  long-polling (no inbound port, no public URL)
+      ▼
+Fly.io machine  ──  /data volume (persistent)
+  agent.main          ├── repo/        ← git clone of this repo (vault, finance, memory)
+  APScheduler         └── sessions.db  ← SQLite (history, FTS, approvals, spend)
+      │
+      ├── Anthropic API (tier-routed models)
+      └── GitHub (push after every knowledge commit = offsite backup + Obsidian sync)
+```
+
+The bot polls Telegram outward, so the machine exposes **no public HTTP
+service** — nothing to scan, nothing to firewall — until/unless the optional
+dashboard endpoint (§4.2) is enabled.
+
+### 9.2 Code changes required (part of the PRs, not manual work)
+
+1. **Startup bootstrap** (`agent/bootstrap.py`, called first in `main()`):
+   - If `PERSONAL_AI_DATA` is set: ensure `/data/repo` exists — first boot
+     clones from `GIT_REMOTE_URL` using the deploy key; later boots
+     `git pull --ff-only`. All paths in `config.py` derive from this root.
+   - If unset (local dev): run in-place from the working copy, exactly as today.
+   - Verify writable data dir, run `init_db()` + `reindex_vault()`, then start
+     polling. Fail loudly (and exit non-zero so Fly restarts/alerts) if the
+     volume or a required secret is missing.
+2. **Deploy key auth for git**: mount `GIT_SSH_KEY` (Fly secret) to a file at
+   boot, set `GIT_SSH_COMMAND`; repo gets a single-repo, write-scoped deploy
+   key — not your account credentials.
+3. **CI/CD workflow** (`.github/workflows/deploy.yml`):
+   - On PR: `uv sync && pytest` + `ruff` (the Phase 8 tests).
+   - On merge to `main`: `flyctl deploy --remote-only` using a `FLY_API_TOKEN`
+     repo secret. **This is what makes "merge → live" true** — after the
+     one-time bootstrap, you never run a deploy command again.
+4. **`/status` command**: replies with uptime, model tiers, last git push
+   time, today's token spend vs. budget, pending inbox count. Your one-glance
+   health check from the phone.
+
+### 9.3 One-time bootstrap (~10 minutes, done once, before or after merging)
+
+Secrets can never be in the repo, so this part is manual by design:
+
+```bash
+# 0. Prereqs (one-time accounts/keys)
+#    - Telegram: @BotFather → create bot → token; @userinfobot → your numeric id
+#    - Anthropic: pay-as-you-go API key, spend cap set in console
+#    - GitHub: deploy key (write) added to this repo
+#    - Fly.io account + flyctl installed
+
+# 1. Create the app and the persistent volume
+fly launch --no-deploy          # uses the checked-in fly.toml
+fly volumes create personal_ai_data --size 1 --region iad
+
+# 2. Set secrets (never in git)
+fly secrets set \
+  TELEGRAM_BOT_TOKEN=... \
+  TELEGRAM_ALLOWED_USER_IDS=<your numeric id> \
+  ANTHROPIC_API_KEY=... \
+  GIT_REMOTE_URL=git@github.com:sreekar9601/personal-ai.git \
+  GIT_SSH_KEY="$(cat deploy_key)" \
+  DAILY_BUDGET_USD=5
+
+# 3. Add FLY_API_TOKEN to GitHub repo secrets (enables auto-deploy on merge)
+fly tokens create deploy | gh secret set FLY_API_TOKEN
+
+# 4. First deploy (every later deploy happens automatically on merge)
+fly deploy
+```
+
+**Local-first alternative** (no Fly at all): run `uv sync && uv run python -m
+agent.main` on any always-on machine (old laptop, home server) with the same
+`.env`. Everything in this plan works identically; Fly only buys you
+"always on without owning hardware".
+
+### 9.4 Go-live acceptance checklist
+
+Run through this from your phone the day it ships — it doubles as the smoke
+test for every future deploy:
+
+- [ ] `/start` answers; a stranger's account gets silence (allowlist works).
+- [ ] Send a thought → filed to `vault/00-inbox/`, one-line confirmation.
+- [ ] "spent 120 on coffee" → `✓ ₹120 · dining · today`; row visible in
+      `finance/transactions/<month>.csv` on GitHub within a minute (push works).
+- [ ] Send a receipt photo → parsed expense, correct amount.
+- [ ] `/dash` → chart image + month summary.
+- [ ] "add task: renew passport by July 20" → appears in `vault/tasks.md`.
+- [ ] Ask the bot to write outside the allowlist → Approve/Deny buttons
+      appear; Deny leaves no file behind.
+- [ ] `/status` → healthy; token spend shown.
+- [ ] `fly machine restart` → conversation context and pending approvals
+      survive; vault intact (volume + persisted state work).
+- [ ] Next morning: the scheduled brief arrives unprompted.
+
+### 9.5 Operating it (steady state)
+
+- **Update flow**: merge PR → CI tests → auto-deploy → `/status` to confirm.
+  Rollback is `fly releases` + `fly deploy --image <previous>`.
+- **Observability**: `fly logs` for the raw stream; set `LOGFIRE_TOKEN` for
+  traces + per-turn cost. The daily budget guard (§2.5) is the hard backstop.
+- **Backups**: every knowledge change is committed and pushed (§2.1) — GitHub
+  *is* the offsite backup; nightly SQLite `.backup` to the volume (§8) covers
+  session state. Restore = new volume + clone + redeploy.
+- **Editing from desktop**: open `vault/` in Obsidian with the Git plugin;
+  your edits push, the bot's bootstrap pulls on restart (and a scheduled
+  `git pull` keeps a long-running machine fresh).
+
+---
+
+## 10. Sequencing
 
 | Order | Phase | Why this order | Rough size |
 |---|---|---|---|
 | 1 | **2. Critical fixes** | Data-loss bug + open-bot risk; everything else builds on a durable base | ~1 day |
-| 2 | **3. Finance core** (text capture, ledger, `/month`) | Your #1 stated ask; establishes the deterministic-tool pattern | ~2–3 days |
-| 3 | **4.1 + receipt photos + voice** | Makes phone capture genuinely zero-friction; dashboard-in-chat lands early | ~2 days |
-| 4 | **5. Tasks + clarity flows** | Second stated ask; mostly reuses the ledger pattern | ~1–2 days |
-| 5 | **6. Scheduler jobs** | Compounds everything above; small code, big felt value | ~1 day |
-| 6 | **4.2 HTML dashboard** | Nice-to-have once in-chat dashboard proves the data model | ~1 day |
-| 7 | **7. Self-improvement loop** | Needs feedback data flowing first | ~2 days |
-| 8 | **8. Hardening + tests** | Interleave throughout; finish before adding email/calendar sources | ongoing |
+| 2 | **9. Deployment** (bootstrap, deploy key, CI/CD, `/status`) | Gets a real bot on your phone immediately; every later merge auto-ships | ~1 day + 10-min manual bootstrap |
+| 3 | **3. Finance core** (text capture, ledger, `/month`) | Your #1 stated ask; establishes the deterministic-tool pattern | ~2–3 days |
+| 4 | **4.1 + receipt photos + voice** | Makes phone capture genuinely zero-friction; dashboard-in-chat lands early | ~2 days |
+| 5 | **5. Tasks + clarity flows** | Second stated ask; mostly reuses the ledger pattern | ~1–2 days |
+| 6 | **6. Scheduler jobs** | Compounds everything above; small code, big felt value | ~1 day |
+| 7 | **4.2 HTML dashboard** | Nice-to-have once in-chat dashboard proves the data model | ~1 day |
+| 8 | **7. Self-improvement loop** | Needs feedback data flowing first | ~2 days |
+| 9 | **8. Hardening + tests** | Interleave throughout; finish before adding email/calendar sources | ongoing |
 
-Each slice ships independently and is usable the day it lands. Nothing here
-requires new infrastructure beyond the Fly app you already have — the only
-optional addition is the authenticated HTTP endpoint in §4.2.
+Each slice ships independently and is usable the day it lands — with
+deployment second in line, **you are talking to the live bot from slice 2
+onward**, and every subsequent merge to `main` reaches your phone
+automatically (§9.2.3). After the final PR merges, the go-live checklist
+(§9.4) is the definition of done: run it once from Telegram and the system
+described at the top of this document is the system you're holding.
