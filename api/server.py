@@ -7,20 +7,27 @@ static shell is public (it is just HTML — all data sits behind /api).
 """
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import re
 import time
+import uuid
 from collections import deque
 from datetime import date
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from agent import config, finance, gitsync, providers, retrieval, spend
+from agent import config, finance, gitsync, memory, providers, retrieval, spend
+from agent import loop as agent_loop
 from agent.hooks import PathNotAllowed, resolve_in_repo
 
 from . import auth
+
+# One human, one conversation thread for the PWA (Telegram keeps its own).
+PWA_SESSION = "pwa:owner"
 
 _MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
 _CATEGORY_RE = re.compile(r"^[\w &/-]{1,40}$")
@@ -250,6 +257,73 @@ def build_api() -> FastAPI:
     @app.get("/api/notes/search", dependencies=[Depends(_session_ok)])
     async def notes_search(q: str = ""):
         return {"hits": retrieval.search_vault(q) if q.strip() else []}
+
+    # --- Chat + approvals (slice P3) ---------------------------------------------
+    def _result_event(result, tier: str) -> dict:
+        """TurnResult -> SSE/JSON event. Pending approvals go into the same
+        persistent store the Telegram buttons use, so either surface can decide."""
+        if result.needs_approval:
+            token = uuid.uuid4().hex[:12]
+            call_ids = [r.tool_call_id for r in result.approvals]
+            memory.save_pending(
+                token, PWA_SESSION, tier, call_ids, result.resume_messages
+            )
+            return {
+                "type": "approval",
+                "token": token,
+                "items": [r.summary for r in result.approvals],
+            }
+        return {"type": "reply", "text": result.text or "(no output)"}
+
+    @app.post("/api/chat", dependencies=[Depends(_session_ok)])
+    async def chat(body: dict):
+        text = (body.get("text") or "").strip()
+        if not text:
+            raise HTTPException(400, "empty message")
+
+        async def stream():
+            task = asyncio.create_task(
+                agent_loop.run_turn(PWA_SESSION, text, tier="default")
+            )
+            # Heartbeats keep the connection alive (and the typing dots on)
+            # while the turn runs; the final event carries the outcome.
+            while not task.done():
+                yield 'data: {"type":"typing"}\n\n'
+                await asyncio.wait({task}, timeout=2.0)
+            try:
+                result = task.result()
+            except spend.BudgetExceeded as e:
+                yield f'data: {json.dumps({"type": "error", "text": str(e)})}\n\n'
+                return
+            except Exception as e:
+                log.exception("pwa chat turn failed")
+                msg = f"{type(e).__name__}: {e}"
+                yield f'data: {json.dumps({"type": "error", "text": msg})}\n\n'
+                return
+            yield f'data: {json.dumps(_result_event(result, "default"))}\n\n'
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    @app.post("/api/approvals/{token}", dependencies=[Depends(_session_ok)])
+    async def decide_approval(token: str, body: dict):
+        pending = memory.pop_pending(token)
+        if not pending:
+            raise HTTPException(404, "approval expired or unknown")
+        session_id, messages, tier, call_ids = pending
+        approve = bool(body.get("approve"))
+        decisions = {cid: approve for cid in call_ids}
+        try:
+            result = await agent_loop.resume_turn(
+                session_id, messages, decisions, tier=tier
+            )
+        except Exception as e:
+            log.exception("pwa resume failed")
+            raise HTTPException(500, f"{type(e).__name__}: {e}")
+        return _result_event(result, tier)
 
     # --- Static app shell ---------------------------------------------------------
     if config.WEB_DIR.is_dir():

@@ -136,9 +136,97 @@ function switchView(name) {
   document.querySelectorAll("#tabbar .tab").forEach((t) =>
     t.classList.toggle("active", t.dataset.view === name)
   );
+  $("chat-inputbar").classList.toggle("hidden", name !== "chat");
   if (name === "status") loadStatus();
   if (name === "money") loadMoney();
   if (name === "notes" && !$("notes-body").dataset.loaded) browseNotes("vault");
+}
+
+/* ---------- Chat tab ---------- */
+function bubble(cls, html) {
+  $("chat-empty")?.remove();
+  const div = document.createElement("div");
+  div.className = "bubble " + cls;
+  div.innerHTML = html;
+  $("chat-log").appendChild(div);
+  div.scrollIntoView({ block: "end" });
+  return div;
+}
+
+function approvalCard(ev) {
+  const div = bubble("assistant approval-card",
+    `<div class="approval-head">🔐 Approval needed</div>` +
+    ev.items.map((s) => `<pre class="approval-item">${esc(s)}</pre>`).join("") +
+    `<div class="approval-actions">
+       <button class="ok primary">Approve</button>
+       <button class="no">Deny</button>
+     </div>`);
+  const done = (label) => {
+    div.querySelector(".approval-actions").innerHTML =
+      `<span class="muted">${label}</span>`;
+  };
+  div.querySelector(".ok").addEventListener("click", async () => {
+    done("✅ Approved — running…");
+    try { handleChatEvent(await api(`/api/approvals/${ev.token}`, { approve: true })); }
+    catch (e) { bubble("assistant error-bubble", esc(e.message)); }
+  });
+  div.querySelector(".no").addEventListener("click", async () => {
+    done("❌ Denied");
+    try { handleChatEvent(await api(`/api/approvals/${ev.token}`, { approve: false })); }
+    catch (e) { bubble("assistant error-bubble", esc(e.message)); }
+  });
+}
+
+let typingEl = null;
+function handleChatEvent(ev) {
+  if (ev.type === "typing") {
+    if (!typingEl) typingEl = bubble("assistant typing", "<span></span><span></span><span></span>");
+    return;
+  }
+  if (typingEl) { typingEl.remove(); typingEl = null; }
+  if (ev.type === "reply") bubble("assistant", esc(ev.text).replace(/\n/g, "<br>"));
+  else if (ev.type === "approval") approvalCard(ev);
+  else if (ev.type === "error") bubble("assistant error-bubble", esc(ev.text));
+}
+
+async function sendChat() {
+  const input = $("chat-input");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  bubble("user", esc(text).replace(/\n/g, "<br>"));
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+      credentials: "same-origin",
+    });
+    if (!res.ok) {
+      let detail = res.statusText;
+      try { detail = (await res.json()).detail || detail; } catch (_) {}
+      throw new Error(detail);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const chunk = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        const line = chunk.split("\n").find((l) => l.startsWith("data: "));
+        if (line) handleChatEvent(JSON.parse(line.slice(6)));
+      }
+    }
+    if (typingEl) { typingEl.remove(); typingEl = null; }
+  } catch (e) {
+    if (typingEl) { typingEl.remove(); typingEl = null; }
+    bubble("assistant error-bubble", esc(e.message || String(e)));
+  }
 }
 
 /* ---------- Money tab ---------- */
@@ -341,6 +429,10 @@ document.addEventListener("DOMContentLoaded", () => {
   );
   $("month-prev").addEventListener("click", () => shiftMonth(-1));
   $("month-next").addEventListener("click", () => shiftMonth(1));
+  $("chat-send").addEventListener("click", sendChat);
+  $("chat-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); sendChat(); }
+  });
   $("notes-search").addEventListener("input", (e) => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => searchNotes(e.target.value), 250);

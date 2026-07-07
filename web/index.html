@@ -61,8 +61,11 @@
   <!-- App -->
   <main id="screen-app" class="screen hidden">
     <div id="view-chat" class="view">
-      <div class="placeholder">💬 Chat lands in slice P3.<br>
-        <span class="muted">Until then, Telegram remains the capture channel.</span></div>
+      <div id="chat-log" class="chat-log">
+        <div class="placeholder small" id="chat-empty">
+          Send a thought to capture it, ask a question,<br>or log an expense.
+        </div>
+      </div>
     </div>
     <div id="view-money" class="view hidden">
       <div class="month-nav">
@@ -85,6 +88,12 @@
       <button id="btn-logout" class="linklike">Sign out</button>
     </div>
   </main>
+
+  <div id="chat-inputbar" class="hidden">
+    <input id="chat-input" type="text" placeholder="Message…"
+           autocomplete="off" autocapitalize="sentences" enterkeyhint="send">
+    <button id="chat-send" aria-label="send">↑</button>
+  </div>
 
   <nav id="tabbar" class="hidden">
     <button data-view="chat" class="tab active">💬<span>Chat</span></button>
