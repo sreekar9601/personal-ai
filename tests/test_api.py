@@ -6,7 +6,6 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from agent import config
 from api import auth
 from api.server import build_api
 

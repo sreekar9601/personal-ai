@@ -1,11 +1,14 @@
 # personal-ai
 
-A single personal agent over one git-backed knowledge repo, reachable via
-Telegram. Model-agnostic (Pydantic AI), Obsidian as the editing surface.
+A single personal agent over one git-backed knowledge repo, reachable from your
+phone two ways: an **installable iPhone app (PWA)** locked with Face ID, and a
+Telegram bot. Model-agnostic (Pydantic AI), Obsidian as the editing surface.
 
-It captures ideas, synthesises them into a personal wiki, tracks a job search,
-answers questions about your spending, briefs you each morning, and improves its
-own playbooks — all over plain files in one git repo, with approval-gated writes.
+It captures ideas, synthesises them into a personal wiki, logs expenses from a
+sentence or a receipt photo, tracks a job search, answers questions about your
+spending, briefs you each morning (Telegram + lock-screen push), and improves
+its own playbooks — all over plain files in one git repo, with approval-gated
+writes.
 
 **Build phases (all shipped):**
 
@@ -18,6 +21,7 @@ own playbooks — all over plain files in one git repo, with approval-gated writ
 | 4 — proactive | Scheduled nightly synthesis + a morning **briefing** on Telegram. |
 | 5 — self-improvement | A **reflection loop** that writes its own reusable skills. |
 | 6 — hardening | Content guards, an audit trail, and a pytest suite. |
+| 10 — phone app | Installable **PWA**: passkey (Face ID) auth, chat + approvals, money dashboard, notes browser, receipt-photo capture, Web Push. |
 
 ## Quickstart
 
@@ -103,6 +107,27 @@ No Python changes. (Set the matching provider API key in `.env`.)
 - **Audit:** every turn commits knowledge changes to git and logs to
   `vault/log.md`; side-effectful tool calls also append to `.data/audit.log`.
 
+## The phone app (PWA)
+
+The app is served by the same process on the public HTTPS port, gated by a
+single-user passkey (docs/PWA-DESIGN.md). To get it on your iPhone:
+
+1. Deploy (below), with `PWA_ORIGIN` set to your app's public URL — passkeys
+   bind to this domain, so it must match what you open in Safari.
+2. Open that URL in Safari → **Share → Add to Home Screen**.
+3. Open the installed app. First run: paste the **enrollment token** from the
+   server log (`fly logs | grep enroll`) and create your passkey (Face ID).
+   Save the recovery code it shows you — it re-opens enrollment if you lose
+   the phone.
+4. In the **Status** tab, tap **Enable notifications** to get the morning
+   briefing and weekly reflection on your lock screen (E2E-encrypted push).
+
+Daily use: **Chat** to capture thoughts, ask questions, and log expenses
+("spent 450 on groceries at BigBasket"); 📷 for receipts (read by vision →
+ledger); the keyboard mic key for voice; **Money** for the live dashboard;
+**Notes** to browse/search the wiki; approvals appear as in-chat cards (the
+same approval can also be decided from Telegram — one store).
+
 ## Deploy (Fly.io)
 
 See `PLAN.md` §9 for the full path. Short version: the volume at `/data` holds
@@ -116,6 +141,7 @@ fly secrets set TELEGRAM_BOT_TOKEN=... TELEGRAM_ALLOWED_USER_IDS=<your id> \
     ANTHROPIC_API_KEY=... DAILY_BUDGET_USD=5 \
     GIT_REMOTE_URL=git@github.com:<you>/personal-ai.git \
     GIT_SSH_KEY="$(cat deploy_key)"
+# fly.toml: set PWA_ORIGIN to this app's public URL (https://<app>.fly.dev)
 fly tokens create deploy | gh secret set FLY_API_TOKEN   # merge -> auto-deploy
 fly deploy                                               # first deploy only
 ```

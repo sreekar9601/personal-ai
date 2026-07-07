@@ -1,5 +1,8 @@
 # PWA Design — the personal app
 
+> **Status: shipped.** Slices P1–P5 are on `main` (P6 = this doc + README
+> go-live path). See README §"The phone app (PWA)" for setup on a real phone.
+
 *Design for the iPhone-first companion app (PLAN.md Phase 10). The goal is not
 "a chat client": it is a **personal platform** — one authenticated surface that
 today shows the assistant, money, and tasks, and later absorbs whatever domain

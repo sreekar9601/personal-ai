@@ -101,7 +101,8 @@ async def on_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return
     await update.effective_message.reply_text(
         "Personal AI online. Send an idea to capture it, /spec <idea> for a full"
-        " spec, or /synthesize to fold the inbox into the wiki."
+        " spec, or /synthesize to fold the inbox into the wiki.\n"
+        f"📱 The app: {config.PWA_ORIGIN} (Add to Home Screen, unlock with Face ID)."
     )
 
 
