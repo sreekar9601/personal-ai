@@ -394,7 +394,23 @@ test for every future deploy:
 
 ---
 
-## 10. Sequencing
+## 10. Phase 10 — the personal app (iPhone PWA)
+
+The long-term surface: an installable, passkey-locked web app served by the
+same Fly machine — chat, money, tasks, notes, and status as tabs, with Web
+Push for the proactive messages. It closes the Telegram privacy gap (traffic
+goes phone → your server only; even push payloads are E2E-encrypted) and is
+the expansion chassis for every future domain: one new tab + one new API
+router per domain, same brain underneath.
+
+Full design — architecture, iOS constraints, auth model, API surface, build
+slices P1–P6 — lives in **`docs/PWA-DESIGN.md`**. Telegram stays the capture
+channel until slice P3 proves the PWA chat is strictly nicer, then gets
+demoted to fallback.
+
+---
+
+## 11. Sequencing
 
 | Order | Phase | Why this order | Rough size |
 |---|---|---|---|
