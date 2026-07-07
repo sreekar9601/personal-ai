@@ -28,6 +28,12 @@ def has_remote() -> bool:
     return bool(_git("remote").stdout.strip())
 
 
+def last_commit() -> str | None:
+    """Short summary of the latest commit (for /status), or None outside a repo."""
+    res = _git("log", "-1", "--format=%h %s (%cr)")
+    return res.stdout.strip() or None
+
+
 def commit_knowledge(message: str) -> str | None:
     """Stage tracked dirs and commit if anything changed. Returns commit subject
     on success, None if there was nothing to commit. Never raises."""

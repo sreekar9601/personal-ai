@@ -90,13 +90,39 @@ No Python changes. (Set the matching provider API key in `.env`.)
 ## Safety model
 
 - **Kill switch:** `KILL_SWITCH=true` disables all writes + git push.
+- **Fail-closed access:** startup aborts if `TELEGRAM_ALLOWED_USER_IDS` is empty
+  (set `DEV_MODE=true` to deliberately run open, local dev only).
+- **Daily budget:** `DAILY_BUDGET_USD` caps estimated model spend per day
+  (pricing in `agent/models.yaml`); the bot declines politely once it's hit.
 - **Approval gate:** writes outside the allowlist need a Telegram confirmation.
+  Pending approvals are persisted, so they survive a restart.
 - **Path safety:** any path escaping the repo root is refused.
 - **Content guards (Phase 6):** oversized writes and private-key material are
   refused outright, even inside the auto-approve zone.
 - **Read-only finance:** `finance_query` rejects anything but a single SELECT/WITH.
 - **Audit:** every turn commits knowledge changes to git and logs to
   `vault/log.md`; side-effectful tool calls also append to `.data/audit.log`.
+
+## Deploy (Fly.io)
+
+See `PLAN.md` §9 for the full path. Short version: the volume at `/data` holds
+a git clone of this repo (the knowledge) plus sqlite; `agent/bootstrap.py`
+clones it on first boot and pulls on later boots. One-time setup:
+
+```bash
+fly launch --no-deploy
+fly volumes create personal_ai_data --size 1 --region iad
+fly secrets set TELEGRAM_BOT_TOKEN=... TELEGRAM_ALLOWED_USER_IDS=<your id> \
+    ANTHROPIC_API_KEY=... DAILY_BUDGET_USD=5 \
+    GIT_REMOTE_URL=git@github.com:<you>/personal-ai.git \
+    GIT_SSH_KEY="$(cat deploy_key)"
+fly tokens create deploy | gh secret set FLY_API_TOKEN   # merge -> auto-deploy
+fly deploy                                               # first deploy only
+```
+
+After that, every merge to `main` tests and deploys itself
+(`.github/workflows/deploy.yml`). `/status` in Telegram shows uptime, spend
+vs. budget, inbox size, and the last knowledge commit.
 
 ## Tests
 

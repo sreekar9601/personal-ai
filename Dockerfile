@@ -1,8 +1,8 @@
 # Minimal image for the polling worker. uv handles deps + the 3.12 runtime.
 FROM python:3.12-slim
 
-# git is required: the agent commits knowledge changes.
-RUN apt-get update && apt-get install -y --no-install-recommends git \
+# git commits knowledge changes; openssh-client lets it push via a deploy key.
+RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/

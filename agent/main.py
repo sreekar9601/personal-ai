@@ -13,6 +13,7 @@ agent/scheduler.py), both gated by PROACTIVE_ENABLED.
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -27,9 +28,11 @@ from telegram.ext import (
 )
 
 from . import (
+    bootstrap,
     briefing,
     config,
     finance,
+    gitsync,
     jobs,
     loop,
     memory,
@@ -37,6 +40,7 @@ from . import (
     reflect,
     retrieval,
     scheduler as scheduler_jobs,
+    spend,
     synthesis,
 )
 from .loop import TurnResult
@@ -44,9 +48,7 @@ from .loop import TurnResult
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("personal-ai")
 
-# In-process store of turns waiting on approval:
-# token -> (session_id, resume_messages, tier, pending_call_ids)
-_PENDING: dict[str, tuple[str, list, str, list[str]]] = {}
+_STARTED = time.monotonic()  # for /status uptime
 
 SPEC_DIRECTIVE = (
     "The user wants a detailed spec. Follow the spec-writing playbook"
@@ -67,12 +69,17 @@ def _session_id(update: Update) -> str:
     return f"tg:{update.effective_chat.id}"
 
 
-async def _deliver(update: Update, result: TurnResult) -> None:
-    """Send a TurnResult to the user, rendering an approval prompt if needed."""
+async def _deliver(update: Update, result: TurnResult, tier: str = "default") -> None:
+    """Send a TurnResult to the user, rendering an approval prompt if needed.
+
+    `tier` is the tier the turn ran on, so an approved resume continues on the
+    same model. Pending approvals are persisted (they survive restarts)."""
     if result.needs_approval:
         token = uuid.uuid4().hex[:12]
         call_ids = [r.tool_call_id for r in result.approvals]
-        _PENDING[token] = (_session_id(update), result.resume_messages, "default", call_ids)
+        memory.save_pending(
+            token, _session_id(update), tier, call_ids, result.resume_messages
+        )
         lines = ["🔐 *Approval needed* for write(s) outside the auto-approve zone:\n"]
         for r in result.approvals:
             lines.append(f"• `{r.summary}`\n")
@@ -105,6 +112,9 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await ctx.bot.send_chat_action(update.effective_chat.id, "typing")
     try:
         result = await loop.run_turn(_session_id(update), text, tier="default")
+    except spend.BudgetExceeded as e:
+        await update.effective_message.reply_text(f"💸 {e}")
+        return
     except Exception as e:  # surface failures rather than going silent
         log.exception("turn failed")
         await update.effective_message.reply_text(f"⚠️ {type(e).__name__}: {e}")
@@ -128,7 +138,7 @@ async def on_spec(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         log.exception("spec failed")
         await update.effective_message.reply_text(f"⚠️ {type(e).__name__}: {e}")
         return
-    await _deliver(update, result)
+    await _deliver(update, result, tier="strong")
 
 
 async def on_job(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -148,7 +158,7 @@ async def on_job(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         log.exception("job failed")
         await update.effective_message.reply_text(f"⚠️ {type(e).__name__}: {e}")
         return
-    await _deliver(update, result)
+    await _deliver(update, result, tier="strong")
 
 
 async def on_import(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -211,7 +221,7 @@ async def on_synthesize(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         log.exception("synthesis failed")
         await update.effective_message.reply_text(f"⚠️ {type(e).__name__}: {e}")
         return
-    await _deliver(update, result)
+    await _deliver(update, result, tier="strong")
 
 
 async def on_reflect(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -224,7 +234,39 @@ async def on_reflect(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         log.exception("reflect failed")
         await update.effective_message.reply_text(f"⚠️ {type(e).__name__}: {e}")
         return
-    await _deliver(update, result)
+    await _deliver(update, result, tier="strong")
+
+
+async def on_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """One-glance health check (PLAN.md §9.2): uptime, spend, sync, inbox."""
+    if not _authorized(update):
+        return
+    up = int(time.monotonic() - _STARTED)
+    hours, minutes = divmod(up // 60, 60)
+    usage = spend.today()
+    budget = config.DAILY_BUDGET_USD
+    budget_line = (
+        f"${usage['cost_usd']:.2f} of ${budget:.2f} est." if budget > 0
+        else f"${usage['cost_usd']:.2f} est. (no ceiling)"
+    )
+    inbox = config.VAULT_DIR / "00-inbox"
+    inbox_n = len(list(inbox.glob("*.md"))) if inbox.is_dir() else 0
+    last = gitsync.last_commit() or "none yet"
+    lines = [
+        f"⏱ Uptime: {hours}h{minutes:02d}m"
+        + (" · deployed" if config.DEPLOYED else " · local"),
+        f"🧠 Models ({providers.provider_name()}): "
+        + ", ".join(
+            f"{t}={providers.model_for(t).split(':', 1)[-1]}"
+            for t in ("cheap", "default", "strong")
+        ),
+        f"💰 Today: {budget_line} "
+        f"({usage['input_tokens']:,} in / {usage['output_tokens']:,} out tokens)",
+        f"📥 Inbox: {inbox_n} capture(s) waiting",
+        f"🔄 Last knowledge commit: {last}",
+        f"🛑 Kill switch: {'ON' if config.KILL_SWITCH else 'off'}",
+    ]
+    await update.effective_message.reply_text("\n".join(lines))
 
 
 async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -233,7 +275,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     action, _, token = query.data.partition(":")
-    pending = _PENDING.pop(token, None)
+    pending = memory.pop_pending(token)
     if not pending:
         await query.edit_message_text("This approval has expired.")
         return
@@ -248,7 +290,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         log.exception("resume failed")
         await query.message.reply_text(f"⚠️ {type(e).__name__}: {e}")
         return
-    await _deliver(update, result)
+    await _deliver(update, result, tier=tier)
 
 
 def build_app() -> Application:
@@ -264,9 +306,10 @@ def build_app() -> Application:
             f"No API key for provider '{providers.provider_name()}'. "
             "Set it in .env (see .env.example)."
         )
-    if not config.TELEGRAM_ALLOWED_USER_IDS:
-        log.warning("TELEGRAM_ALLOWED_USER_IDS is empty — the bot is OPEN to anyone.")
+    # Fails closed on an empty allowlist; prepares the volume layout when deployed.
+    bootstrap.ensure_environment()
     memory.init_db()
+    spend.init_db()
     retrieval.init_db()
     n = retrieval.reindex_vault()  # build the keyword index from the vault on disk
     log.info("Vault keyword index ready (%d files).", n)
@@ -279,6 +322,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("finance", on_finance))
     app.add_handler(CommandHandler("briefing", on_briefing))
     app.add_handler(CommandHandler("reflect", on_reflect))
+    app.add_handler(CommandHandler("status", on_status))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
 
