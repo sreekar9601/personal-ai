@@ -8,16 +8,22 @@ static shell is public (it is just HTML — all data sits behind /api).
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections import deque
+from datetime import date
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from agent import config, gitsync, providers, spend
+from agent import config, finance, gitsync, providers, retrieval, spend
+from agent.hooks import PathNotAllowed, resolve_in_repo
 
 from . import auth
+
+_MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
+_CATEGORY_RE = re.compile(r"^[\w &/-]{1,40}$")
 
 log = logging.getLogger("personal-ai.api")
 
@@ -171,6 +177,79 @@ def build_api() -> FastAPI:
     @app.get("/api/status", dependencies=[Depends(_session_ok)])
     async def status():
         return status_payload()
+
+    @app.get("/api/bootstrap", dependencies=[Depends(_session_ok)])
+    async def bootstrap_data():
+        """One call on app open: everything the tabs need to first-paint."""
+        month = date.today().strftime("%Y-%m")
+        try:
+            summary = finance.summary(month)
+        except Exception:  # empty/absent ledger must not blank the app
+            summary = {"period": month, "by_category": [], "totals": {}}
+        return {"status": status_payload(), "finance": summary, "month": month}
+
+    @app.get("/api/finance/summary", dependencies=[Depends(_session_ok)])
+    async def finance_summary(month: str | None = None):
+        if month and not _MONTH_RE.match(month):
+            raise HTTPException(400, "month must be YYYY-MM")
+        try:
+            return finance.summary(month)
+        except finance.FinanceError as e:
+            raise HTTPException(400, str(e))
+
+    @app.get("/api/finance/ledger", dependencies=[Depends(_session_ok)])
+    async def finance_ledger(
+        month: str | None = None, category: str | None = None, limit: int = 50
+    ):
+        # Inputs are validated to a safe shape, then inlined (the ledger view is
+        # read-only and single-statement-guarded in finance.query).
+        if month and not _MONTH_RE.match(month):
+            raise HTTPException(400, "month must be YYYY-MM")
+        if category and not _CATEGORY_RE.match(category):
+            raise HTTPException(400, "invalid category")
+        where = []
+        if month:
+            where.append(f"strftime(date, '%Y-%m') = '{month}'")
+        if category:
+            where.append("category = '" + category.replace("'", "''") + "'")
+        sql = (
+            "SELECT id, date, description, amount, category, account FROM ledger"
+            + (" WHERE " + " AND ".join(where) if where else "")
+            + " ORDER BY date DESC, id"
+        )
+        try:
+            rows = finance.query(sql, limit=max(1, min(int(limit), 500)))
+        except finance.FinanceError as e:
+            raise HTTPException(400, str(e))
+        return {"rows": rows}
+
+    @app.get("/api/notes", dependencies=[Depends(_session_ok)])
+    async def notes(path: str = "vault"):
+        """Read-only vault browser: directories list, files return content."""
+        norm = path.replace("\\", "/").strip("/")
+        try:
+            abs_path = resolve_in_repo(norm)
+        except PathNotAllowed:
+            raise HTTPException(403, "path escapes the vault")
+        # Containment is checked on the RESOLVED path, so `vault/../x` can't
+        # sneak past a string-prefix test.
+        vault_root = config.VAULT_DIR.resolve()
+        if abs_path != vault_root and vault_root not in abs_path.parents:
+            raise HTTPException(403, "only vault/ is browsable")
+        if not abs_path.exists():
+            raise HTTPException(404, "not found")
+        if abs_path.is_dir():
+            entries = [
+                {"name": p.name, "dir": p.is_dir()}
+                for p in sorted(abs_path.iterdir(), key=lambda p: (not p.is_dir(), p.name))
+                if not p.name.startswith(".")
+            ]
+            return {"type": "dir", "path": norm, "entries": entries}
+        return {"type": "file", "path": norm, "content": abs_path.read_text()}
+
+    @app.get("/api/notes/search", dependencies=[Depends(_session_ok)])
+    async def notes_search(q: str = ""):
+        return {"hits": retrieval.search_vault(q) if q.strip() else []}
 
     # --- Static app shell ---------------------------------------------------------
     if config.WEB_DIR.is_dir():

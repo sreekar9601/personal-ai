@@ -119,6 +119,41 @@ code.recovery {
 .card-value { font-size: 22px; font-weight: 700; margin-top: 4px; overflow-wrap: anywhere; }
 .card-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
 
+/* Money + lists */
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.stack h2 { font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 6px; }
+.month-nav {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+}
+.month-nav span { font-size: 18px; font-weight: 700; }
+.month-nav button {
+  background: var(--surface); border: 0; color: var(--text);
+  font-size: 22px; width: 40px; height: 40px; border-radius: 12px; cursor: pointer;
+}
+.list { display: flex; flex-direction: column; gap: 8px; }
+.row { background: var(--surface); border-radius: var(--radius); padding: 12px 14px; }
+.row-main { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; }
+.row-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-amount { font-variant-numeric: tabular-nums; font-weight: 600; flex-shrink: 0; }
+.row-amount.pos { color: #4ccb8f; }
+.row-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.bar { height: 5px; background: var(--surface-2); border-radius: 3px; margin-top: 8px; }
+.bar-fill { height: 100%; background: var(--accent); border-radius: 3px; }
+.nav-row { cursor: pointer; }
+.nav-row:active { background: var(--surface-2); }
+.placeholder.small { padding-top: 10vh; font-size: 15px; }
+
+/* Notes */
+#notes-search { margin-bottom: 12px; }
+.note-title { font-size: 18px; margin: 4px 0 10px; }
+.note-md { background: var(--surface); border-radius: var(--radius); padding: 16px; font-size: 15px; }
+.note-md h1, .note-md h2, .note-md h3 { margin: 12px 0 6px; line-height: 1.25; }
+.note-md h1 { font-size: 19px; } .note-md h2 { font-size: 17px; } .note-md h3 { font-size: 15px; }
+.note-md p { margin: 8px 0; overflow-wrap: anywhere; }
+.note-md ul { margin: 8px 0 8px 20px; }
+.wikilink { color: var(--accent); }
+
 /* Tab bar */
 #tabbar {
   position: fixed;

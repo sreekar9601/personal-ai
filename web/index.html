@@ -65,13 +65,20 @@
         <span class="muted">Until then, Telegram remains the capture channel.</span></div>
     </div>
     <div id="view-money" class="view hidden">
-      <div class="placeholder">💰 Money dashboard lands in slice P2.</div>
+      <div class="month-nav">
+        <button id="month-prev" aria-label="previous month">‹</button>
+        <span id="month-label"></span>
+        <button id="month-next" aria-label="next month">›</button>
+      </div>
+      <div id="money-body" class="stack"></div>
     </div>
     <div id="view-tasks" class="view hidden">
       <div class="placeholder">✅ Tasks land with the tasks slice.</div>
     </div>
     <div id="view-notes" class="view hidden">
-      <div class="placeholder">📚 Notes browser lands in slice P2.</div>
+      <input id="notes-search" type="text" placeholder="Search notes…"
+             autocomplete="off" spellcheck="false">
+      <div id="notes-body" class="stack"></div>
     </div>
     <div id="view-status" class="view hidden">
       <div id="status-body" class="cards"></div>

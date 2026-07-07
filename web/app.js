@@ -127,8 +127,7 @@ function enterApp() {
   $("screen-auth").classList.add("hidden");
   $("screen-app").classList.remove("hidden");
   $("tabbar").classList.remove("hidden");
-  switchView("status"); // P1: status is the live tab
-  loadStatus();
+  switchView("money");
 }
 
 function switchView(name) {
@@ -138,6 +137,143 @@ function switchView(name) {
     t.classList.toggle("active", t.dataset.view === name)
   );
   if (name === "status") loadStatus();
+  if (name === "money") loadMoney();
+  if (name === "notes" && !$("notes-body").dataset.loaded) browseNotes("vault");
+}
+
+/* ---------- Money tab ---------- */
+const moneyState = { month: new Date() };
+
+function monthKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+function shiftMonth(delta) {
+  moneyState.month.setMonth(moneyState.month.getMonth() + delta);
+  loadMoney();
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function money(n) {
+  const v = Math.abs(Number(n) || 0);
+  return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+async function loadMoney() {
+  const key = monthKey(moneyState.month);
+  $("month-label").textContent = moneyState.month.toLocaleDateString(undefined,
+    { month: "long", year: "numeric" });
+  const el = $("money-body");
+  try {
+    const [summary, ledger] = await Promise.all([
+      api(`/api/finance/summary?month=${key}`),
+      api(`/api/finance/ledger?month=${key}&limit=30`),
+    ]);
+    const t = summary.totals || {};
+    const spent = Math.abs(t.spent || 0);
+    const income = t.income || 0;
+    let html = `<div class="cards">` +
+      card("Spent", money(spent)) +
+      card("Income", money(income)) +
+      `</div>`;
+
+    const cats = (summary.by_category || []).filter((c) => (c.net || 0) < 0);
+    if (cats.length) {
+      const max = Math.max(...cats.map((c) => Math.abs(c.net)));
+      // Widths are applied via CSSOM below — CSP (style-src 'self') strips
+      // inline style attributes, but scripted style assignment is allowed.
+      html += `<h2>By category</h2><div class="list">` + cats.map((c) => `
+        <div class="row">
+          <div class="row-main">
+            <span>${esc(c.category)}</span>
+            <span class="row-amount">${money(c.net)}</span>
+          </div>
+          <div class="bar"><div class="bar-fill" data-w="${Math.round(100 * Math.abs(c.net) / max)}"></div></div>
+        </div>`).join("") + `</div>`;
+    }
+
+    const rows = ledger.rows || [];
+    if (rows.length) {
+      html += `<h2>Transactions</h2><div class="list">` + rows.map((r) => `
+        <div class="row">
+          <div class="row-main">
+            <span class="row-desc">${esc(r.description || "—")}</span>
+            <span class="row-amount ${Number(r.amount) > 0 ? "pos" : ""}">${money(r.amount)}</span>
+          </div>
+          <div class="row-sub">${esc(r.date || "")} · ${esc(r.category || "")}</div>
+        </div>`).join("") + `</div>`;
+    }
+    if (!cats.length && !rows.length) {
+      html += `<div class="placeholder small">No transactions for ${esc(key)}.<br>
+        <span class="muted">Log expenses via Telegram or drop a CSV in finance/imports/.</span></div>`;
+    }
+    el.innerHTML = html;
+    el.querySelectorAll(".bar-fill").forEach((b) => { b.style.width = b.dataset.w + "%"; });
+  } catch (e) {
+    if (String(e.message).includes("Not signed in")) return boot();
+    el.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  }
+}
+
+/* ---------- Notes tab ---------- */
+function mdToHtml(md) {
+  let h = esc(md);
+  h = h.replace(/\[\[([^\]]+)\]\]/g, '<span class="wikilink">$1</span>');
+  h = h.replace(/^###### (.*)$/gm, "<h6>$1</h6>")
+       .replace(/^##### (.*)$/gm, "<h5>$1</h5>")
+       .replace(/^#### (.*)$/gm, "<h4>$1</h4>")
+       .replace(/^### (.*)$/gm, "<h3>$1</h3>")
+       .replace(/^## (.*)$/gm, "<h2>$1</h2>")
+       .replace(/^# (.*)$/gm, "<h1>$1</h1>");
+  h = h.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  h = h.replace(/^[-*] (.*)$/gm, "<li>$1</li>");
+  h = h.replace(/(<li>.*<\/li>\n?)+/g, (m) => `<ul>${m}</ul>`);
+  h = h.replace(/\n{2,}/g, "</p><p>");
+  return `<div class="note-md"><p>${h}</p></div>`;
+}
+
+async function browseNotes(path) {
+  const el = $("notes-body");
+  el.dataset.loaded = "1";
+  try {
+    const res = await api(`/api/notes?path=${encodeURIComponent(path)}`);
+    if (res.type === "dir") {
+      const up = path !== "vault"
+        ? `<div class="row nav-row" data-path="${esc(path.split("/").slice(0, -1).join("/"))}">← up</div>` : "";
+      el.innerHTML = up + (res.entries.length ? res.entries.map((e2) => `
+        <div class="row nav-row" data-path="${esc(path + "/" + e2.name)}">
+          ${e2.dir ? "📁" : "📄"} ${esc(e2.name)}
+        </div>`).join("") : `<div class="placeholder small">Empty.</div>`);
+    } else {
+      el.innerHTML = `<div class="row nav-row" data-path="${esc(res.path.split("/").slice(0, -1).join("/"))}">← back</div>
+        <h2 class="note-title">${esc(res.path.split("/").pop())}</h2>` + mdToHtml(res.content);
+    }
+    el.querySelectorAll(".nav-row").forEach((r) =>
+      r.addEventListener("click", () => browseNotes(r.dataset.path)));
+  } catch (e) {
+    if (String(e.message).includes("Not signed in")) return boot();
+    el.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  }
+}
+
+let searchTimer = null;
+async function searchNotes(q) {
+  if (!q.trim()) return browseNotes("vault");
+  const el = $("notes-body");
+  try {
+    const res = await api(`/api/notes/search?q=${encodeURIComponent(q)}`);
+    el.innerHTML = res.hits.length ? res.hits.map((h) => `
+      <div class="row nav-row" data-path="${esc(h.path)}">
+        <div class="row-main"><span>📄 ${esc(h.title)}</span></div>
+        <div class="row-sub">${esc(h.snippet).replace(/«/g, "<strong>").replace(/»/g, "</strong>")}</div>
+      </div>`).join("") : `<div class="placeholder small">No matches.</div>`;
+    el.querySelectorAll(".nav-row").forEach((r) =>
+      r.addEventListener("click", () => browseNotes(r.dataset.path)));
+  } catch (e) {
+    el.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  }
 }
 
 function card(title, value, sub) {
@@ -203,6 +339,12 @@ document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll("#tabbar .tab").forEach((t) =>
     t.addEventListener("click", () => switchView(t.dataset.view))
   );
+  $("month-prev").addEventListener("click", () => shiftMonth(-1));
+  $("month-next").addEventListener("click", () => shiftMonth(1));
+  $("notes-search").addEventListener("input", (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => searchNotes(e.target.value), 250);
+  });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");
   boot().catch((e) => showError(e.message || String(e)));
 });
