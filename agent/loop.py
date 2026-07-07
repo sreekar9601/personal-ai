@@ -25,7 +25,7 @@ from pydantic_ai import (
     UsageLimits,
 )
 
-from . import audit, config, finance, memory, providers, retrieval
+from . import audit, config, finance, memory, providers, retrieval, spend
 from .hooks import PathNotAllowed, is_auto_approved, resolve_in_repo
 from .tools import vault as vault_tools
 
@@ -272,6 +272,7 @@ async def run_turn(
     directive: str | None = None,
 ) -> TurnResult:
     """Run one user turn. `directive` is an optional task framing (e.g. for /spec)."""
+    spend.check_budget()  # daily ceiling; raises BudgetExceeded before any model call
     memory.index_turn(session_id, "user", user_text)
     history = memory.load_history(session_id)
     prompt = f"{directive}\n\n{user_text}" if directive else user_text
@@ -283,6 +284,7 @@ async def run_turn(
         model_settings=providers.settings_for(tier),
         usage_limits=UsageLimits(request_limit=config.MAX_TURNS),
     )
+    spend.record(providers.model_for(tier), run_result.usage())
     return _to_result(run_result, session_id, f"turn: {user_text[:60]}")
 
 
@@ -294,7 +296,10 @@ async def resume_turn(
 ) -> TurnResult:
     """Resume a turn after the user approved/denied pending writes.
 
-    `decisions` maps tool_call_id -> True (approve) / False (deny)."""
+    `decisions` maps tool_call_id -> True (approve) / False (deny).
+
+    No budget check here: a resume finishes work the user just approved, so it
+    always runs (its usage is still recorded against today)."""
     results = DeferredToolResults(
         approvals={
             cid: (ToolApproved() if ok else ToolDenied("Denied by user."))
@@ -308,4 +313,5 @@ async def resume_turn(
         model_settings=providers.settings_for(tier),
         usage_limits=UsageLimits(request_limit=config.MAX_TURNS),
     )
+    spend.record(providers.model_for(tier), run_result.usage())
     return _to_result(run_result, session_id, "turn (resumed after approval)")

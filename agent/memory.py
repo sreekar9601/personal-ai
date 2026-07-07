@@ -1,20 +1,28 @@
 """Session memory: durable conversation history + full-text search.
 
-Two stores in one SQLite file:
+Three stores in one SQLite file:
   - `sessions`: the serialized Pydantic AI message history per session, so a
     conversation survives restarts and can be resumed.
   - `messages_fts`: an FTS5 index of plain-text turns for "what did we say
     about X" search across past conversations.
+  - `pending_approvals`: turns paused on a Telegram Approve/Deny button, so an
+    approval survives a process restart (PLAN.md §2.3).
 
 Durable *facts* (USER.md / MEMORY.md) are plain markdown read at prompt-assembly
 time; see read_user() / read_memory().
 """
 from __future__ import annotations
 
+import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelMessagesTypeAdapter,
+    ModelRequest,
+    UserPromptPart,
+)
 
 from . import config
 
@@ -38,6 +46,36 @@ def init_db() -> None:
             """CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts
                USING fts5(session_id, ts, role, text)"""
         )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS pending_approvals (
+                   token      TEXT PRIMARY KEY,
+                   session_id TEXT NOT NULL,
+                   tier       TEXT NOT NULL,
+                   call_ids   TEXT NOT NULL,
+                   history    BLOB NOT NULL,
+                   created_at TEXT NOT NULL
+               )"""
+        )
+
+
+def _trim_history(messages: list[ModelMessage]) -> list[ModelMessage]:
+    """Bound history growth (PLAN.md §2.4): keep the most recent window.
+
+    The cut must land on a ModelRequest that carries a user prompt — cutting
+    mid tool-call cycle would hand the provider an orphaned tool result. If no
+    clean boundary exists inside the window, return the history unchanged
+    (correctness beats the bound).
+    """
+    limit = config.HISTORY_MAX_MESSAGES
+    if limit <= 0 or len(messages) <= limit:
+        return messages
+    window = messages[-limit:]
+    for i, msg in enumerate(window):
+        if isinstance(msg, ModelRequest) and any(
+            isinstance(p, UserPromptPart) for p in msg.parts
+        ):
+            return window[i:]
+    return messages
 
 
 def load_history(session_id: str) -> list[ModelMessage]:
@@ -47,7 +85,7 @@ def load_history(session_id: str) -> list[ModelMessage]:
         ).fetchone()
     if not row:
         return []
-    return list(ModelMessagesTypeAdapter.validate_json(row[0]))
+    return _trim_history(list(ModelMessagesTypeAdapter.validate_json(row[0])))
 
 
 def save_history(session_id: str, messages: list[ModelMessage]) -> None:
@@ -102,6 +140,56 @@ def read_user() -> str:
 
 def read_memory() -> str:
     return _read(config.MEMORY_MD)
+
+
+# --- Pending approvals (survive restarts) -------------------------------------
+_APPROVAL_TTL = timedelta(hours=24)
+
+
+def save_pending(
+    token: str,
+    session_id: str,
+    tier: str,
+    call_ids: list[str],
+    messages: list[ModelMessage],
+) -> None:
+    """Persist a turn that is paused on a Telegram Approve/Deny decision."""
+    now = datetime.now(timezone.utc)
+    with _connect() as conn:
+        conn.execute(
+            "DELETE FROM pending_approvals WHERE created_at < ?",
+            ((now - _APPROVAL_TTL).isoformat(),),
+        )
+        conn.execute(
+            """INSERT OR REPLACE INTO pending_approvals
+               (token, session_id, tier, call_ids, history, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                token,
+                session_id,
+                tier,
+                json.dumps(call_ids),
+                ModelMessagesTypeAdapter.dump_json(messages),
+                now.isoformat(),
+            ),
+        )
+
+
+def pop_pending(token: str) -> tuple[str, list[ModelMessage], str, list[str]] | None:
+    """Fetch-and-delete a pending approval. Returns
+    (session_id, resume_messages, tier, call_ids) or None if expired/unknown."""
+    cutoff = (datetime.now(timezone.utc) - _APPROVAL_TTL).isoformat()
+    with _connect() as conn:
+        row = conn.execute(
+            """SELECT session_id, tier, call_ids, history, created_at
+               FROM pending_approvals WHERE token = ?""",
+            (token,),
+        ).fetchone()
+        conn.execute("DELETE FROM pending_approvals WHERE token = ?", (token,))
+    if not row or row[4] < cutoff:
+        return None
+    messages = list(ModelMessagesTypeAdapter.validate_json(row[3]))
+    return row[0], messages, row[1], json.loads(row[2])
 
 
 # --- Durable facts (the active memory layer) ---------------------------------

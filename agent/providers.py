@@ -37,6 +37,19 @@ def model_for(tier: Tier) -> str:
     return tiers[tier]
 
 
+def pricing_for(model: str) -> tuple[float, float]:
+    """(input, output) USD per million tokens for a model string.
+
+    Read from the optional `pricing:` map in models.yaml; falls back to a
+    conservative default so the budget guard still counts when a model has no
+    entry. Estimates only — the provider console is the source of truth.
+    """
+    entry = (_cfg().get("pricing") or {}).get(model)
+    if entry:
+        return float(entry["input"]), float(entry["output"])
+    return 3.0, 15.0
+
+
 def settings_for(tier: Tier, *, max_tokens: int = 4096) -> ModelSettings:
     """Build ModelSettings for a tier.
 
