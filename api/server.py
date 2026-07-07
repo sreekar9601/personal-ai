@@ -24,7 +24,7 @@ from agent import config, finance, gitsync, memory, providers, retrieval, spend
 from agent import loop as agent_loop
 from agent.hooks import PathNotAllowed, resolve_in_repo
 
-from . import auth
+from . import auth, push
 
 # One human, one conversation thread for the PWA (Telegram keeps its own).
 PWA_SESSION = "pwa:owner"
@@ -324,6 +324,27 @@ def build_api() -> FastAPI:
             log.exception("pwa resume failed")
             raise HTTPException(500, f"{type(e).__name__}: {e}")
         return _result_event(result, tier)
+
+    # --- Web Push (slice P4) --------------------------------------------------------
+    @app.get("/api/push/key", dependencies=[Depends(_session_ok)])
+    async def push_key():
+        return {
+            "key": push.ensure_vapid_keys(),
+            "subscriptions": push.subscription_count(),
+        }
+
+    @app.post("/api/push/subscribe", dependencies=[Depends(_session_ok)])
+    async def push_subscribe(body: dict):
+        try:
+            push.subscribe(body.get("subscription") or {})
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {"ok": True, "subscriptions": push.subscription_count()}
+
+    @app.post("/api/push/unsubscribe", dependencies=[Depends(_session_ok)])
+    async def push_unsubscribe(body: dict):
+        push.unsubscribe(body.get("endpoint", ""))
+        return {"ok": True, "subscriptions": push.subscription_count()}
 
     # --- Static app shell ---------------------------------------------------------
     if config.WEB_DIR.is_dir():

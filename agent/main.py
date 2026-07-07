@@ -344,11 +344,14 @@ async def _amain() -> None:
     import uvicorn
 
     from api import auth as api_auth
+    from api import push as api_push
     from api.server import build_api
 
     app = build_app()
     api_auth.init_db()
     api_auth.ensure_enroll_token()
+    api_push.init_db()
+    api_push.ensure_vapid_keys()
     server = uvicorn.Server(
         uvicorn.Config(
             build_api(), host="0.0.0.0", port=config.PORT, log_config=None

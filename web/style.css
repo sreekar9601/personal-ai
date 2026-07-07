@@ -154,6 +154,10 @@ code.recovery {
 .note-md ul { margin: 8px 0 8px 20px; }
 .wikilink { color: var(--accent); }
 
+/* Push */
+.push-btn { margin-top: 16px; }
+.push-note { font-size: 13px; margin-top: 10px; text-align: center; }
+
 /* Chat */
 .chat-log {
   display: flex; flex-direction: column; gap: 10px;

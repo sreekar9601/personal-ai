@@ -137,7 +137,7 @@ function switchView(name) {
     t.classList.toggle("active", t.dataset.view === name)
   );
   $("chat-inputbar").classList.toggle("hidden", name !== "chat");
-  if (name === "status") loadStatus();
+  if (name === "status") { loadStatus(); refreshPushUI(); }
   if (name === "money") loadMoney();
   if (name === "notes" && !$("notes-body").dataset.loaded) browseNotes("vault");
 }
@@ -394,6 +394,50 @@ async function loadStatus() {
   }
 }
 
+/* ---------- Web Push ---------- */
+async function refreshPushUI() {
+  const btn = $("btn-push");
+  const note = $("push-note");
+  btn.classList.add("hidden");
+  note.classList.add("hidden");
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    const standalone = window.navigator.standalone === true ||
+      window.matchMedia("(display-mode: standalone)").matches;
+    if (!standalone) {
+      note.textContent = "Install the app (Share → Add to Home Screen) to enable notifications.";
+      note.classList.remove("hidden");
+    }
+    return;
+  }
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  if (sub) {
+    note.textContent = "🔔 Notifications are on (briefings, reflections).";
+    note.classList.remove("hidden");
+  } else {
+    btn.classList.remove("hidden");
+  }
+}
+
+async function enablePush() {
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") throw new Error("Notifications were not allowed.");
+    const { key } = await api("/api/push/key");
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: new Uint8Array(b64uToBuf(key)),
+    });
+    await api("/api/push/subscribe", { subscription: sub.toJSON() });
+    await refreshPushUI();
+  } catch (e) {
+    const note = $("push-note");
+    note.textContent = e.message || String(e);
+    note.classList.remove("hidden");
+  }
+}
+
 /* ---------- Boot ---------- */
 async function boot() {
   // iOS install nudge: outside standalone mode, push + the best UX are unavailable.
@@ -420,6 +464,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("btn-back-login").addEventListener("click", () => authScreen("auth-login"));
   $("btn-recover").addEventListener("click", doRecover);
   $("btn-recovery-done").addEventListener("click", enterApp);
+  $("btn-push").addEventListener("click", enablePush);
   $("btn-logout").addEventListener("click", async () => {
     await api("/api/logout", {});
     location.reload();

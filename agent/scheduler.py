@@ -23,6 +23,19 @@ _SYNTH_SESSION = "cron:synthesis"
 _REFLECT_SESSION = "cron:reflect"
 
 
+async def _push(title: str, body: str, tag: str) -> None:
+    """Mirror a proactive message to the PWA's lock screen. Best-effort; the
+    import is lazy so the scheduler never depends on the API package at load."""
+    try:
+        import asyncio
+
+        from api import push as api_push
+
+        await asyncio.to_thread(api_push.send_to_all, title, body, tag)
+    except Exception:  # push must never break a job
+        log.exception("web push failed")
+
+
 async def _nightly_synthesis() -> None:
     if config.KILL_SWITCH:
         return
@@ -41,6 +54,7 @@ def _make_reflect_job(bot, chat_id: int):
             result = await reflect.reflect(_REFLECT_SESSION)
             if result.text:
                 await bot.send_message(chat_id, f"🧠 Weekly reflection:\n{result.text}")
+                await _push("Weekly reflection", result.text, "reflection")
             log.info("weekly reflection done")
         except Exception:
             log.exception("weekly reflection failed")
@@ -54,6 +68,7 @@ def _make_briefing_job(bot, chat_id: int):
             text = briefing.build()
             gitsync.commit_knowledge("journal: morning briefing")
             await bot.send_message(chat_id, text)
+            await _push("Morning briefing", text, "briefing")
             log.info("briefing sent to %s", chat_id)
         except Exception:
             log.exception("morning briefing failed")

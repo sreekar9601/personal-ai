@@ -2,7 +2,7 @@
    never cached — the app is a view over server state (docs/PWA-DESIGN.md §1). */
 "use strict";
 
-const VERSION = "p3-1";
+const VERSION = "p4-1";
 const SHELL = [
   "/",
   "/app.js",
@@ -24,6 +24,29 @@ self.addEventListener("activate", (event) => {
     caches.keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener("push", (event) => {
+  let data = { title: "Personal AI", body: "", tag: "personal-ai" };
+  try { data = { ...data, ...event.data.json() }; } catch (_) {}
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      tag: data.tag,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
+      for (const w of wins) if ("focus" in w) return w.focus();
+      return clients.openWindow("/");
+    })
   );
 });
 
