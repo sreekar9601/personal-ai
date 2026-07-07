@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Personal AI">
+  <meta name="theme-color" content="#0f1115">
+  <title>Personal AI</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/icon-180.png">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- Install banner (shown in Safari-tab mode on iOS) -->
+  <div id="install-banner" class="banner hidden">
+    Install this app: tap <strong>Share</strong> → <strong>Add to Home Screen</strong>.
+    Push notifications and Face&nbsp;ID unlock need the installed app.
+  </div>
+
+  <!-- Auth screens -->
+  <section id="screen-auth" class="screen hidden">
+    <div class="auth-card">
+      <img src="/icons/icon-180.png" alt="" class="auth-logo">
+      <h1>Personal AI</h1>
+
+      <div id="auth-login" class="hidden">
+        <p class="muted">Your assistant is locked.</p>
+        <button id="btn-login" class="primary">Unlock with Face ID</button>
+        <button id="btn-show-recover" class="linklike">Lost your passkey?</button>
+      </div>
+
+      <div id="auth-enroll" class="hidden">
+        <p class="muted">First time here. Paste the enrollment token from the
+        server log to register this phone's passkey.</p>
+        <input id="enroll-token" type="text" autocomplete="off"
+               placeholder="enrollment token" spellcheck="false">
+        <button id="btn-enroll" class="primary">Create passkey</button>
+      </div>
+
+      <div id="auth-recover" class="hidden">
+        <p class="muted">Enter your recovery code to re-open enrollment.</p>
+        <input id="recover-code" type="text" autocomplete="off"
+               placeholder="recovery code" spellcheck="false">
+        <button id="btn-recover" class="primary">Recover</button>
+        <button id="btn-back-login" class="linklike">Back</button>
+      </div>
+
+      <div id="recovery-show" class="hidden">
+        <p><strong>Save this recovery code now</strong> — it is shown once and
+        re-opens enrollment if you lose this phone:</p>
+        <code id="recovery-code-text" class="recovery"></code>
+        <button id="btn-recovery-done" class="primary">I saved it — continue</button>
+      </div>
+
+      <p id="auth-error" class="error hidden"></p>
+    </div>
+  </section>
+
+  <!-- App -->
+  <main id="screen-app" class="screen hidden">
+    <div id="view-chat" class="view">
+      <div class="placeholder">💬 Chat lands in slice P3.<br>
+        <span class="muted">Until then, Telegram remains the capture channel.</span></div>
+    </div>
+    <div id="view-money" class="view hidden">
+      <div class="placeholder">💰 Money dashboard lands in slice P2.</div>
+    </div>
+    <div id="view-tasks" class="view hidden">
+      <div class="placeholder">✅ Tasks land with the tasks slice.</div>
+    </div>
+    <div id="view-notes" class="view hidden">
+      <div class="placeholder">📚 Notes browser lands in slice P2.</div>
+    </div>
+    <div id="view-status" class="view hidden">
+      <div id="status-body" class="cards"></div>
+      <button id="btn-logout" class="linklike">Sign out</button>
+    </div>
+  </main>
+
+  <nav id="tabbar" class="hidden">
+    <button data-view="chat" class="tab active">💬<span>Chat</span></button>
+    <button data-view="money" class="tab">💰<span>Money</span></button>
+    <button data-view="tasks" class="tab">✅<span>Tasks</span></button>
+    <button data-view="notes" class="tab">📚<span>Notes</span></button>
+    <button data-view="status" class="tab">📡<span>Status</span></button>
+  </nav>
+
+  <script src="/app.js"></script>
+</body>
+</html>

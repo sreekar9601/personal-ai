@@ -334,10 +334,42 @@ def build_app() -> Application:
     return app
 
 
-def main() -> None:
+async def _amain() -> None:
+    """Run the Telegram bot and the PWA's HTTP server in one asyncio loop.
+
+    One process keeps sqlite access simple and lets both transports share the
+    same brain (docs/PWA-DESIGN.md §2). uvicorn owns signal handling: when it
+    exits (SIGTERM/SIGINT), the bot is stopped cleanly behind it.
+    """
+    import uvicorn
+
+    from api import auth as api_auth
+    from api.server import build_api
+
     app = build_app()
+    api_auth.init_db()
+    api_auth.ensure_enroll_token()
+    server = uvicorn.Server(
+        uvicorn.Config(
+            build_api(), host="0.0.0.0", port=config.PORT, log_config=None
+        )
+    )
+    async with app:
+        await app.updater.start_polling()
+        await app.start()
+        log.info("PWA listening on :%d (origin %s)", config.PORT, config.PWA_ORIGIN)
+        try:
+            await server.serve()
+        finally:
+            await app.updater.stop()
+            await app.stop()
+
+
+def main() -> None:
+    import asyncio
+
     log.info("Personal AI starting (kill_switch=%s)", config.KILL_SWITCH)
-    app.run_polling()
+    asyncio.run(_amain())
 
 
 if __name__ == "__main__":

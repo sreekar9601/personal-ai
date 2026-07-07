@@ -54,6 +54,8 @@ PLAYBOOKS_DIR = REPO_ROOT / "playbooks"
 FINANCE_DIR = REPO_ROOT / "finance"
 AGENT_DIR = REPO_ROOT / "agent"
 
+WEB_DIR = CODE_ROOT / "web"  # the PWA's static shell ships with the code
+
 AGENT_MD = REPO_ROOT / "AGENT.md"
 USER_MD = MEMORY_DIR / "USER.md"
 MEMORY_MD = MEMORY_DIR / "MEMORY.md"
@@ -110,6 +112,12 @@ GIT_PUSH = _flag("GIT_PUSH", "false")
 # and an optional SSH deploy key (the key *contents*) for clone/push auth.
 GIT_REMOTE_URL = _env("GIT_REMOTE_URL")
 GIT_SSH_KEY = _env("GIT_SSH_KEY")
+
+# --- PWA (Phase 10) -----------------------------------------------------------
+# Public origin the app is served from; WebAuthn binds passkeys to this domain.
+# Production: your Fly app URL (https://<app>.fly.dev). Local dev: localhost.
+PWA_ORIGIN = (_env("PWA_ORIGIN", "http://localhost:8080") or "").rstrip("/")
+PORT = int(_env("PORT", "8080"))
 
 # --- Proactive scheduling (Phase 4) -----------------------------------------
 # When enabled, the agent runs unattended jobs: a nightly wiki-synthesis pass and

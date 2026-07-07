@@ -4,8 +4,9 @@
 #   fly secrets set TELEGRAM_BOT_TOKEN=... ANTHROPIC_API_KEY=... \
 #       TELEGRAM_ALLOWED_USER_IDS=123456789
 #
-# The volume holds the git repo (vault + sqlite). The bot is long-polling, so it
-# needs no public HTTP service — keep it off the public internet.
+# The volume holds the git repo (vault + sqlite). The Telegram bot long-polls
+# outward; the PWA (Phase 10) is served on the public HTTPS port, gated by
+# passkey auth (api/auth.py). Set PWA_ORIGIN to this app's public URL.
 
 app = "personal-ai"
 primary_region = "iad"
@@ -20,12 +21,21 @@ primary_region = "iad"
   KILL_SWITCH = "false"
   MAX_TURNS = "12"
   GIT_PUSH = "true"
+  PWA_ORIGIN = "https://personal-ai.fly.dev"  # <- your app's public URL
 
 [mounts]
   source = "personal_ai_data"
   destination = "/data"
 
-# No [http_service] — this is a polling worker, not a web server.
+# The PWA. The Telegram poller must never be stopped for idleness, so
+# auto_stop stays off and one machine always runs.
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
 [[vm]]
   size = "shared-cpu-1x"
   memory = "512mb"
