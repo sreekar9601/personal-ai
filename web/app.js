@@ -394,6 +394,48 @@ async function loadStatus() {
   }
 }
 
+/* ---------- Photo capture ---------- */
+async function downscaleImage(file, maxDim = 1600, quality = 0.85) {
+  // Keep uploads (and vision tokens) small; iOS camera photos are huge.
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, maxDim / Math.max(bmp.width, bmp.height));
+    if (scale === 1 && file.size < 2 * 1024 * 1024) return file;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bmp.width * scale);
+    canvas.height = Math.round(bmp.height * scale);
+    canvas.getContext("2d").drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((ok) => canvas.toBlob(ok, "image/jpeg", quality));
+    return blob || file;
+  } catch (_) {
+    return file; // downscale is an optimisation, never a blocker
+  }
+}
+
+async function sendPhoto(file) {
+  if (!file) return;
+  switchView("chat");
+  const url = URL.createObjectURL(file);
+  bubble("user", `<img class="photo-thumb" src="${url}" alt="photo">`);
+  handleChatEvent({ type: "typing" });
+  try {
+    const blob = await downscaleImage(file);
+    const form = new FormData();
+    form.append("file", blob, "photo.jpg");
+    const res = await fetch("/api/capture/photo", {
+      method: "POST", body: form, credentials: "same-origin",
+    });
+    if (!res.ok) {
+      let detail = res.statusText;
+      try { detail = (await res.json()).detail || detail; } catch (_) {}
+      throw new Error(detail);
+    }
+    handleChatEvent(await res.json());
+  } catch (e) {
+    handleChatEvent({ type: "error", text: e.message || String(e) });
+  }
+}
+
 /* ---------- Web Push ---------- */
 async function refreshPushUI() {
   const btn = $("btn-push");
@@ -477,6 +519,11 @@ document.addEventListener("DOMContentLoaded", () => {
   $("chat-send").addEventListener("click", sendChat);
   $("chat-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); sendChat(); }
+  });
+  $("chat-photo").addEventListener("click", () => $("photo-file").click());
+  $("photo-file").addEventListener("change", (e) => {
+    sendPhoto(e.target.files[0]);
+    e.target.value = "";
   });
   $("notes-search").addEventListener("input", (e) => {
     clearTimeout(searchTimer);

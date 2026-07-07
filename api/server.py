@@ -16,7 +16,7 @@ import uuid
 from collections import deque
 from datetime import date
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -28,6 +28,17 @@ from . import auth, push
 
 # One human, one conversation thread for the PWA (Telegram keeps its own).
 PWA_SESSION = "pwa:owner"
+
+_MAX_PHOTO_BYTES = 8 * 1024 * 1024
+
+PHOTO_DIRECTIVE = (
+    "The user sent a photo from their phone — most likely a RECEIPT. Read it"
+    " carefully. If it is a receipt/bill: extract the merchant, the final total,"
+    " the date, and a sensible category, then call log_expense exactly once per"
+    " receipt (amount is the final total). If it is clearly not a money"
+    " document, capture a short note describing what it shows instead. Reply"
+    " with one short line saying what you logged or filed."
+)
 
 _MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
 _CATEGORY_RE = re.compile(r"^[\w &/-]{1,40}$")
@@ -324,6 +335,33 @@ def build_api() -> FastAPI:
             log.exception("pwa resume failed")
             raise HTTPException(500, f"{type(e).__name__}: {e}")
         return _result_event(result, tier)
+
+    # --- Photo capture (slice P5) ----------------------------------------------------
+    @app.post("/api/capture/photo", dependencies=[Depends(_session_ok)])
+    async def capture_photo(file: UploadFile = File(...), note: str = Form("")):
+        """Receipt (or any) photo -> vision turn -> log_expense/capture."""
+        content_type = (file.content_type or "").lower()
+        if not content_type.startswith("image/"):
+            raise HTTPException(415, "only images are accepted")
+        data = await file.read()
+        if len(data) > _MAX_PHOTO_BYTES:
+            raise HTTPException(413, "image too large (client should downscale)")
+        if not data:
+            raise HTTPException(400, "empty upload")
+        try:
+            result = await agent_loop.run_turn(
+                PWA_SESSION,
+                note.strip() or "Photo attached.",
+                tier="default",
+                directive=PHOTO_DIRECTIVE,
+                media=[(data, content_type)],
+            )
+        except spend.BudgetExceeded as e:
+            return {"type": "error", "text": str(e)}
+        except Exception as e:
+            log.exception("photo capture failed")
+            return {"type": "error", "text": f"{type(e).__name__}: {e}"}
+        return _result_event(result, "default")
 
     # --- Web Push (slice P4) --------------------------------------------------------
     @app.get("/api/push/key", dependencies=[Depends(_session_ok)])

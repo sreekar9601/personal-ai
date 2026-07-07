@@ -17,6 +17,7 @@ from datetime import date
 from pydantic_ai import (
     Agent,
     ApprovalRequired,
+    BinaryContent,
     DeferredToolRequests,
     DeferredToolResults,
     RunContext,
@@ -213,6 +214,30 @@ def finance_query(sql: str) -> str:
 
 
 @agent.tool_plain
+def log_expense(
+    amount: float,
+    description: str,
+    category: str | None = None,
+    date: str | None = None,
+    income: bool = False,
+) -> str:
+    """Log ONE transaction to the finance ledger. Use when the user reports an
+    expense ('spent 450 on groceries at BigBasket') or when reading a receipt —
+    do NOT file money events as notes. `amount` is positive; set income=True
+    for money received. Omit `category` to auto-categorise; `date` is
+    YYYY-MM-DD (defaults to today). Returns a one-line confirmation to relay."""
+    result = finance.add_expense(
+        amount, description, category=category, date_str=date, income=income
+    )
+    audit.record(
+        "log_expense",
+        {"amount": amount, "description": description, "category": category},
+        result[:20],
+    )
+    return result
+
+
+@agent.tool_plain
 def search_past(query: str) -> str:
     """Full-text search across past conversations (FTS over session history).
     Use to recall 'what did we say about X'."""
@@ -270,12 +295,19 @@ async def run_turn(
     user_text: str,
     tier: providers.Tier = "default",
     directive: str | None = None,
+    media: list[tuple[bytes, str]] | None = None,
 ) -> TurnResult:
-    """Run one user turn. `directive` is an optional task framing (e.g. for /spec)."""
+    """Run one user turn. `directive` is an optional task framing (e.g. for
+    /spec); `media` is optional (bytes, media_type) attachments, e.g. a
+    receipt photo for a vision-capable model."""
     spend.check_budget()  # daily ceiling; raises BudgetExceeded before any model call
     memory.index_turn(session_id, "user", user_text)
     history = memory.load_history(session_id)
-    prompt = f"{directive}\n\n{user_text}" if directive else user_text
+    prompt: str | list = f"{directive}\n\n{user_text}" if directive else user_text
+    if media:
+        prompt = [prompt] + [
+            BinaryContent(data=data, media_type=mt) for data, mt in media
+        ]
 
     run_result = await agent.run(
         prompt,

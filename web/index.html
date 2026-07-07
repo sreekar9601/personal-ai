@@ -92,7 +92,9 @@
   </main>
 
   <div id="chat-inputbar" class="hidden">
-    <input id="chat-input" type="text" placeholder="Message…"
+    <button id="chat-photo" aria-label="photo">📷</button>
+    <input id="photo-file" type="file" accept="image/*" capture="environment" class="hidden">
+    <input id="chat-input" type="text" placeholder="Message… (mic key to dictate)"
            autocomplete="off" autocapitalize="sentences" enterkeyhint="send">
     <button id="chat-send" aria-label="send">↑</button>
   </div>

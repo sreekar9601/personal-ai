@@ -125,7 +125,7 @@ disables the API's write paths.
 | **P2 — Read-only dashboard** | bootstrap endpoint, Money + Status tabs, Notes browse | ~2 days |
 | **P3 — Chat + approvals** | SSE chat, approval cards, unified approval store | ~2–3 days |
 | **P4 — Push** | VAPID Web Push: morning briefing, approval-needed, budget-hit | ~1–2 days |
-| **P5 — Capture upgrades** | voice notes (MediaRecorder → transcription), receipt photos (vision → ledger) | ~2 days |
+| **P5 — Capture upgrades** | receipt photos (vision → `log_expense` → ledger); voice via the iOS keyboard's dictation key (native on-device STT into the chat input — better latency and zero server/provider cost than a MediaRecorder→transcription pipeline, which would need an audio-capable second provider; revisit only if dictation proves insufficient) | ~2 days |
 | **P6 — Demote Telegram** | make PWA primary, Telegram fallback; revisit whether to keep it | ~½ day |
 
 P1+P2 give a private, Face-ID-locked dashboard on the phone with zero risk to

@@ -182,6 +182,52 @@ def import_new() -> dict:
     return {"blocked": False, "added": added, "files": files, "skipped": skipped}
 
 
+# --- Single-expense logging (P5: chat + receipt photos) -----------------------
+def add_expense(
+    amount: float,
+    description: str,
+    category: str | None = None,
+    date_str: str | None = None,
+    income: bool = False,
+    account: str = "manual",
+) -> str:
+    """Append one transaction to the ledger. Deterministic: validation, sign,
+    id, and categorisation happen here — the model only supplies the fields.
+    Returns a one-line, user-showable confirmation. De-dups by content id."""
+    if config.KILL_SWITCH:
+        return "[blocked] KILL_SWITCH is on; ledger writes are disabled."
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        return "[refused] amount must be a number."
+    if not (0 < amount < 10_000_000):
+        return "[refused] amount out of range."
+    description = " ".join(str(description or "").split())[:200]
+    if not description:
+        return "[refused] description is required."
+    date = _parse_date(date_str) if date_str else datetime.now().date().isoformat()
+    signed = amount if income else -amount
+    category = (category or "").strip().lower() or categorize(
+        description, load_categories()
+    )
+    row = {
+        "id": _row_id(date, description, signed, account),
+        "date": date,
+        "description": description,
+        "amount": f"{signed:.2f}",
+        "category": category,
+        "account": account,
+        "source": "chat",
+    }
+    rows = _read_ledger()
+    if any(r["id"] == row["id"] for r in rows):
+        return f"[known] already logged: {date} · {description} · {signed:.2f}"
+    rows.append(row)
+    _write_ledger(rows)
+    kind = "income" if income else "spent"
+    return f"[logged] {kind} {amount:.2f} · {category} · {description} · {date}"
+
+
 # --- Query (read-only DuckDB) ------------------------------------------------
 class FinanceError(Exception):
     pass

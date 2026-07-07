@@ -16,6 +16,7 @@ dependencies = [
     "uvicorn[standard]>=0.49.0",
     "webauthn>=3.0.0",
     "pywebpush>=2.3.0",
+    "python-multipart>=0.0.32",
 ]
 
 [dependency-groups]
