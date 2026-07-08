@@ -12,7 +12,9 @@ COPY pyproject.toml uv.lock* README.md ./
 RUN uv sync --no-dev --frozen || uv sync --no-dev
 
 COPY . .
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # .data lives on the mounted volume in production.
 ENV PERSONAL_AI_DATA=/data
-CMD ["uv", "run", "python", "-m", "agent.main"]
+CMD ["/entrypoint.sh"]
