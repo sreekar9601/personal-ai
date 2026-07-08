@@ -294,9 +294,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await _deliver(update, result, tier=tier)
 
 
-def build_app() -> Application:
-    if not config.TELEGRAM_BOT_TOKEN:
-        raise SystemExit("TELEGRAM_BOT_TOKEN is not set. Copy .env.example to .env.")
+def init_runtime() -> None:
+    """Shared startup: env checks, volume layout, databases, vault index."""
     _provider_keys = {
         "anthropic": config.ANTHROPIC_API_KEY,
         "openai": config.OPENAI_API_KEY,
@@ -307,13 +306,18 @@ def build_app() -> Application:
             f"No API key for provider '{providers.provider_name()}'. "
             "Set it in .env (see .env.example)."
         )
-    # Fails closed on an empty allowlist; prepares the volume layout when deployed.
+    # Fails closed on an empty allowlist (when Telegram is enabled); prepares
+    # the volume layout when deployed.
     bootstrap.ensure_environment()
     memory.init_db()
     spend.init_db()
     retrieval.init_db()
     n = retrieval.reindex_vault()  # build the keyword index from the vault on disk
     log.info("Vault keyword index ready (%d files).", n)
+
+
+def build_app() -> Application:
+    """The optional Telegram surface. Only called when a bot token is set."""
     app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", on_start))
     app.add_handler(CommandHandler("spec", on_spec))
@@ -326,21 +330,16 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("status", on_status))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
-
-    # Scheduler runs the Phase 4 proactive jobs (nightly synthesis + briefing).
-    scheduler = AsyncIOScheduler()
-    scheduler.start()
-    scheduler_jobs.register(scheduler, app.bot)
-    app.bot_data["scheduler"] = scheduler
     return app
 
 
 async def _amain() -> None:
-    """Run the Telegram bot and the PWA's HTTP server in one asyncio loop.
+    """Run the PWA's HTTP server — and, if a bot token is configured, the
+    Telegram poller — in one asyncio loop.
 
     One process keeps sqlite access simple and lets both transports share the
     same brain (docs/PWA-DESIGN.md §2). uvicorn owns signal handling: when it
-    exits (SIGTERM/SIGINT), the bot is stopped cleanly behind it.
+    exits (SIGTERM/SIGINT), everything else is stopped cleanly behind it.
     """
     import uvicorn
 
@@ -348,7 +347,7 @@ async def _amain() -> None:
     from api import push as api_push
     from api.server import build_api
 
-    app = build_app()
+    init_runtime()
     api_auth.init_db()
     api_auth.ensure_enroll_token()
     api_push.init_db()
@@ -358,15 +357,30 @@ async def _amain() -> None:
             build_api(), host="0.0.0.0", port=config.PORT, log_config=None
         )
     )
-    async with app:
-        await app.updater.start_polling()
-        await app.start()
-        log.info("PWA listening on :%d (origin %s)", config.PORT, config.PWA_ORIGIN)
-        try:
-            await server.serve()
-        finally:
-            await app.updater.stop()
-            await app.stop()
+
+    # Proactive jobs run in both modes; without Telegram they reach you via
+    # Web Push on the installed app.
+    scheduler = AsyncIOScheduler()
+    scheduler.start()
+
+    if config.TELEGRAM_BOT_TOKEN:
+        app = build_app()
+        scheduler_jobs.register(scheduler, app.bot)
+        async with app:
+            await app.updater.start_polling()
+            await app.start()
+            log.info("PWA listening on :%d (origin %s); Telegram enabled",
+                     config.PORT, config.PWA_ORIGIN)
+            try:
+                await server.serve()
+            finally:
+                await app.updater.stop()
+                await app.stop()
+    else:
+        scheduler_jobs.register(scheduler, None)
+        log.info("PWA listening on :%d (origin %s); app-only mode (no Telegram)",
+                 config.PORT, config.PWA_ORIGIN)
+        await server.serve()
 
 
 def main() -> None:

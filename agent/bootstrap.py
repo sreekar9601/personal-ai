@@ -43,6 +43,10 @@ def ensure_environment() -> None:
 
 
 def _check_access_control() -> None:
+    if not config.TELEGRAM_BOT_TOKEN:
+        # App-only mode: no Telegram surface exists; the PWA's passkey is the
+        # access control (api/auth.py), so there is no allowlist to require.
+        return
     if not config.TELEGRAM_ALLOWED_USER_IDS and not config.DEV_MODE:
         raise SystemExit(
             "TELEGRAM_ALLOWED_USER_IDS is empty — the bot would be open to anyone"

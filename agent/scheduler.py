@@ -46,14 +46,17 @@ async def _nightly_synthesis() -> None:
         log.exception("nightly synthesis failed")
 
 
-def _make_reflect_job(bot, chat_id: int):
+def _make_reflect_job(bot, chat_id: int | None):
     async def _weekly_reflection() -> None:
         if config.KILL_SWITCH:
             return
         try:
             result = await reflect.reflect(_REFLECT_SESSION)
             if result.text:
-                await bot.send_message(chat_id, f"🧠 Weekly reflection:\n{result.text}")
+                if bot and chat_id is not None:
+                    await bot.send_message(
+                        chat_id, f"🧠 Weekly reflection:\n{result.text}"
+                    )
                 await _push("Weekly reflection", result.text, "reflection")
             log.info("weekly reflection done")
         except Exception:
@@ -62,14 +65,15 @@ def _make_reflect_job(bot, chat_id: int):
     return _weekly_reflection
 
 
-def _make_briefing_job(bot, chat_id: int):
+def _make_briefing_job(bot, chat_id: int | None):
     async def _morning_briefing() -> None:
         try:
             text = briefing.build()
             gitsync.commit_knowledge("journal: morning briefing")
-            await bot.send_message(chat_id, text)
+            if bot and chat_id is not None:
+                await bot.send_message(chat_id, text)
             await _push("Morning briefing", text, "briefing")
-            log.info("briefing sent to %s", chat_id)
+            log.info("briefing delivered")
         except Exception:
             log.exception("morning briefing failed")
 
@@ -77,13 +81,16 @@ def _make_briefing_job(bot, chat_id: int):
 
 
 def register(scheduler, bot) -> bool:
-    """Add the proactive jobs to a running scheduler. Returns True if armed."""
+    """Add the proactive jobs to a running scheduler. Returns True if armed.
+
+    `bot` may be None (app-only mode): jobs then deliver via Web Push to the
+    installed PWA instead of a Telegram chat."""
     if not config.PROACTIVE_ENABLED:
         log.info("proactive jobs disabled (PROACTIVE_ENABLED=false).")
         return False
-    if config.TELEGRAM_CHAT_ID is None:
-        log.warning("proactive jobs skipped: no TELEGRAM_CHAT_ID / allowed user.")
-        return False
+    chat_id = config.TELEGRAM_CHAT_ID if bot else None
+    if bot and chat_id is None:
+        log.warning("no TELEGRAM_CHAT_ID / allowed user — jobs will push-only.")
 
     scheduler.add_job(
         _nightly_synthesis,
@@ -92,21 +99,21 @@ def register(scheduler, bot) -> bool:
         replace_existing=True,
     )
     scheduler.add_job(
-        _make_briefing_job(bot, config.TELEGRAM_CHAT_ID),
+        _make_briefing_job(bot, chat_id),
         CronTrigger(hour=config.BRIEFING_HOUR, minute=2),
         id="morning_briefing",
         replace_existing=True,
     )
     scheduler.add_job(
-        _make_reflect_job(bot, config.TELEGRAM_CHAT_ID),
+        _make_reflect_job(bot, chat_id),
         CronTrigger(day_of_week="sun", hour=config.REFLECT_HOUR, minute=13),
         id="weekly_reflection",
         replace_existing=True,
     )
     log.info(
         "proactive jobs armed: synthesis @%02d:07, briefing @%02d:02, "
-        "reflection Sun @%02d:13 -> chat %s",
+        "reflection Sun @%02d:13 -> %s",
         config.SYNTHESIS_HOUR, config.BRIEFING_HOUR, config.REFLECT_HOUR,
-        config.TELEGRAM_CHAT_ID,
+        f"chat {chat_id}" if chat_id is not None else "web push",
     )
     return True

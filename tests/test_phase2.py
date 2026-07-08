@@ -11,6 +11,7 @@ from agent import bootstrap, config, memory, spend
 
 # --- Fail-closed access control ------------------------------------------------
 def test_empty_allowlist_aborts_startup(monkeypatch):
+    monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "123:abc")
     monkeypatch.setattr(config, "TELEGRAM_ALLOWED_USER_IDS", set())
     monkeypatch.setattr(config, "DEV_MODE", False)
     monkeypatch.setattr(config, "DEPLOYED", False)
@@ -19,6 +20,7 @@ def test_empty_allowlist_aborts_startup(monkeypatch):
 
 
 def test_dev_mode_allows_empty_allowlist(monkeypatch):
+    monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "123:abc")
     monkeypatch.setattr(config, "TELEGRAM_ALLOWED_USER_IDS", set())
     monkeypatch.setattr(config, "DEV_MODE", True)
     monkeypatch.setattr(config, "DEPLOYED", False)
@@ -26,7 +28,17 @@ def test_dev_mode_allows_empty_allowlist(monkeypatch):
 
 
 def test_allowlist_set_passes(monkeypatch):
+    monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "123:abc")
     monkeypatch.setattr(config, "TELEGRAM_ALLOWED_USER_IDS", {123})
+    monkeypatch.setattr(config, "DEV_MODE", False)
+    monkeypatch.setattr(config, "DEPLOYED", False)
+    bootstrap.ensure_environment()  # must not raise
+
+
+def test_app_only_mode_needs_no_allowlist(monkeypatch):
+    """No bot token -> no Telegram surface -> the passkey is the access control."""
+    monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", None)
+    monkeypatch.setattr(config, "TELEGRAM_ALLOWED_USER_IDS", set())
     monkeypatch.setattr(config, "DEV_MODE", False)
     monkeypatch.setattr(config, "DEPLOYED", False)
     bootstrap.ensure_environment()  # must not raise

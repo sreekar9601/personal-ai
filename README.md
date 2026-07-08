@@ -1,8 +1,9 @@
 # personal-ai
 
 A single personal agent over one git-backed knowledge repo, reachable from your
-phone two ways: an **installable iPhone app (PWA)** locked with Face ID, and a
-Telegram bot. Model-agnostic (Pydantic AI), Obsidian as the editing surface.
+phone as an **installable iPhone app (PWA)** locked with Face ID — with an
+optional Telegram bot as a second surface. Model-agnostic (Pydantic AI),
+Obsidian as the editing surface.
 
 It captures ideas, synthesises them into a personal wiki, logs expenses from a
 sentence or a receipt photo, tracks a job search, answers questions about your
@@ -137,11 +138,12 @@ clones it on first boot and pulls on later boots. One-time setup:
 ```bash
 fly launch --no-deploy
 fly volumes create personal_ai_data --size 1 --region iad
-fly secrets set TELEGRAM_BOT_TOKEN=... TELEGRAM_ALLOWED_USER_IDS=<your id> \
+fly secrets set \
     ANTHROPIC_API_KEY=... DAILY_BUDGET_USD=5 \
     GIT_REMOTE_URL=git@github.com:<you>/personal-ai.git \
     GIT_SSH_KEY="$(cat deploy_key)"
 # fly.toml: set PWA_ORIGIN to this app's public URL (https://<app>.fly.dev)
+# Optional Telegram surface: also set TELEGRAM_BOT_TOKEN + TELEGRAM_ALLOWED_USER_IDS
 fly tokens create deploy | gh secret set FLY_API_TOKEN   # merge -> auto-deploy
 fly deploy                                               # first deploy only
 ```
