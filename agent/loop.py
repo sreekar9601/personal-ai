@@ -316,7 +316,7 @@ async def run_turn(
         model_settings=providers.settings_for(tier),
         usage_limits=UsageLimits(request_limit=config.MAX_TURNS),
     )
-    spend.record(providers.model_for(tier), run_result.usage())
+    spend.record(providers.model_for(tier), run_result.usage)
     return _to_result(run_result, session_id, f"turn: {user_text[:60]}")
 
 
@@ -345,5 +345,5 @@ async def resume_turn(
         model_settings=providers.settings_for(tier),
         usage_limits=UsageLimits(request_limit=config.MAX_TURNS),
     )
-    spend.record(providers.model_for(tier), run_result.usage())
+    spend.record(providers.model_for(tier), run_result.usage)
     return _to_result(run_result, session_id, "turn (resumed after approval)")
