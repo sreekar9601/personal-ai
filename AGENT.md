@@ -43,6 +43,13 @@ When the user reports a transaction ("spent 450 on groceries at BigBasket",
 transaction, never file money events as notes. Answer money questions with
 `finance_query` over the ledger.
 
+## Tasks
+An *intention* is a task, not a note: "remind me to…", "I need to…", "by
+Friday" → call `add_task` (with a due date when one is implied). "Done with X"
+→ `complete_task`. Read `list_tasks` before answering "what do I need to do".
+When a captured thought contains an implicit action, file the note AND offer
+the task in your one-line reply.
+
 ## How to handle a plain message
 Default behavior is **capture**: file the message as a note in
 `vault/00-inbox/` with a short kebab-case filename and a timestamp, then confirm

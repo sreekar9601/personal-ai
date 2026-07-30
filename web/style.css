@@ -144,6 +144,24 @@ code.recovery {
 .nav-row:active { background: var(--surface-2); }
 .placeholder.small { padding-top: 10vh; font-size: 15px; }
 
+/* Tasks */
+.task-add { display: flex; gap: 8px; margin-bottom: 14px; }
+.task-add #task-input { flex: 1; margin: 0; }
+.task-add #task-due {
+  background: var(--surface-2); border: 0; border-radius: 10px;
+  color: var(--text); font-size: 14px; padding: 0 10px; width: 130px;
+}
+.task-add #task-save {
+  width: 44px; border: 0; border-radius: 10px;
+  background: var(--accent); color: #fff; font-size: 22px; cursor: pointer;
+}
+.task-row { cursor: pointer; }
+.task-row .check { color: var(--muted); margin-right: 6px; }
+.task-row:active { background: var(--surface-2); }
+.task-row.overdue .row-sub { color: var(--error); }
+.task-row.completing { opacity: 0.4; }
+.task-row.completing .check::before { content: "●"; }
+
 /* Notes */
 #notes-search { margin-bottom: 12px; }
 .note-title { font-size: 18px; margin: 4px 0 10px; }

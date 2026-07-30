@@ -25,10 +25,15 @@ Work through the inbox captures one at a time. For each capture:
      frontmatter below and a clean, skimmable write-up in your own words.
    - **Cross-link** related pages with `[[wikilinks]]` (Obsidian style) so the
      wiki stays a graph, not a list.
-4. **Promote durable facts.** If a capture reveals a stable fact about the user
+4. **Route actions to the task list.** If a capture is really an *intention*
+   ("I should call the dentist", "need to renew the passport by August"), call
+   `add_task` with a due date when one is implied, then archive the capture —
+   no wiki page. The inbox drains into three places: the wiki (knowledge), the
+   task list (actions), and memory (facts about the user).
+5. **Promote durable facts.** If a capture reveals a stable fact about the user
    (a preference, an ongoing project, a key person/date), record it with the
    `remember` tool — do *not* put user facts in resource pages.
-5. **Archive the capture** with `vault_move` from `vault/00-inbox/<file>` to
+6. **Archive the capture** with `vault_move` from `vault/00-inbox/<file>` to
    `vault/04-archive/<file>` once its content is safely in the wiki. This drains
    the inbox without losing the original.
 

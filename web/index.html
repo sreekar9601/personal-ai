@@ -76,7 +76,13 @@
       <div id="money-body" class="stack"></div>
     </div>
     <div id="view-tasks" class="view hidden">
-      <div class="placeholder">✅ Tasks land with the tasks slice.</div>
+      <div class="task-add">
+        <input id="task-input" type="text" placeholder="Add a task…"
+               autocomplete="off" enterkeyhint="done">
+        <input id="task-due" type="date" aria-label="due date">
+        <button id="task-save" aria-label="add task">+</button>
+      </div>
+      <div id="tasks-body" class="stack"></div>
     </div>
     <div id="view-notes" class="view hidden">
       <input id="notes-search" type="text" placeholder="Search notes…"

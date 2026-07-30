@@ -27,6 +27,7 @@ from pydantic_ai import (
 )
 
 from . import audit, config, finance, memory, providers, retrieval, spend
+from . import tasks as tasks_store
 from .hooks import PathNotAllowed, is_auto_approved, resolve_in_repo
 from .tools import vault as vault_tools
 
@@ -235,6 +236,44 @@ def log_expense(
         result[:20],
     )
     return result
+
+
+@agent.tool_plain
+def add_task(text: str, due: str | None = None, tag: str | None = None) -> str:
+    """Add ONE actionable item to the task list (vault/tasks.md). Use when the
+    user states an intention or a commitment ('remind me to renew my passport',
+    'I need to call the dentist by Friday') rather than a thought to file.
+    `due` is YYYY-MM-DD; `tag` is a single word like 'errand' or 'work'."""
+    result = tasks_store.add_task(text, due=due, tag=tag)
+    audit.record("add_task", {"text": text, "due": due, "tag": tag}, result[:20])
+    return result
+
+
+@agent.tool_plain
+def complete_task(match: str) -> str:
+    """Mark the first open task containing `match` as done ('done with the
+    passport thing' -> match='passport'). Returns which task was ticked."""
+    result = tasks_store.complete_task(match)
+    audit.record("complete_task", {"match": match}, result[:20])
+    return result
+
+
+@agent.tool_plain
+def list_tasks(include_done: bool = False) -> str:
+    """The current task list with due dates and tags. Read this before
+    answering 'what do I need to do' or when the user asks about their day."""
+    items = tasks_store.list_tasks(include_done=include_done)
+    if not items:
+        return "[no tasks]"
+    lines = []
+    for t in items:
+        bits = ["[x]" if t.done else "[ ]", t.text]
+        if t.due:
+            bits.append(f"(due {t.due})")
+        if t.tags:
+            bits.append(" ".join(f"#{tag}" for tag in t.tags))
+        lines.append(" ".join(bits))
+    return "\n".join(lines)
 
 
 @agent.tool_plain

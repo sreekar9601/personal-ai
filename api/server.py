@@ -22,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 
 from agent import config, finance, gitsync, memory, providers, retrieval, spend
 from agent import loop as agent_loop
+from agent import tasks as tasks_store
 from agent.hooks import PathNotAllowed, resolve_in_repo
 
 from . import auth, push
@@ -335,6 +336,37 @@ def build_api() -> FastAPI:
             log.exception("pwa resume failed")
             raise HTTPException(500, f"{type(e).__name__}: {e}")
         return _result_event(result, tier)
+
+    # --- Tasks (slice C1) -------------------------------------------------------------
+    @app.get("/api/tasks", dependencies=[Depends(_session_ok)])
+    async def get_tasks(include_done: bool = False):
+        return {
+            "tasks": [t.to_dict() for t in tasks_store.list_tasks(include_done)],
+            "agenda": tasks_store.agenda(),
+            "summary": tasks_store.summary_line(),
+        }
+
+    @app.post("/api/tasks", dependencies=[Depends(_session_ok)])
+    async def create_task(body: dict):
+        result = tasks_store.add_task(
+            body.get("text", ""), due=body.get("due"), tag=body.get("tag")
+        )
+        if result.startswith("[refused]"):
+            raise HTTPException(400, result)
+        gitsync.commit_knowledge("tasks: add")
+        return {"result": result, "tasks": [t.to_dict() for t in tasks_store.list_tasks()]}
+
+    @app.patch("/api/tasks", dependencies=[Depends(_session_ok)])
+    async def update_task(body: dict):
+        match = body.get("match", "")
+        done = bool(body.get("done", True))
+        result = (
+            tasks_store.complete_task(match) if done else tasks_store.reopen_task(match)
+        )
+        if result.startswith("[not found]"):
+            raise HTTPException(404, result)
+        gitsync.commit_knowledge("tasks: update")
+        return {"result": result, "tasks": [t.to_dict() for t in tasks_store.list_tasks()]}
 
     # --- Photo capture (slice P5) ----------------------------------------------------
     @app.post("/api/capture/photo", dependencies=[Depends(_session_ok)])

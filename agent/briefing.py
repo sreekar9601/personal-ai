@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from . import config, finance
+from . import config, finance, tasks
 
 _TERMINAL_STATUSES = {"offer", "rejected", "withdrawn", "hired"}
 
@@ -63,6 +63,13 @@ def build() -> str:
     """Assemble today's briefing, persist it to the journal, and return the text."""
     today = date.today().isoformat()
     lines = [f"# Briefing — {today}", ""]
+
+    agenda = tasks.agenda()
+    for bucket, label in (("overdue", "⚠️ Overdue"), ("today", "📌 Due today")):
+        items = agenda.get(bucket) or []
+        if items:
+            lines.append(f"- {label}:")
+            lines.extend(f"    - {t['text']}" for t in items)
 
     inbox = _inbox_count()
     if inbox:

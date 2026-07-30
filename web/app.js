@@ -20,9 +20,10 @@ function bufToB64u(buf) {
 }
 
 /* ---------- API helper ---------- */
-async function api(path, body) {
+async function api(path, body, method) {
+  const verb = method || (body === undefined ? "GET" : "POST");
   const res = await fetch(path, {
-    method: body === undefined ? "GET" : "POST",
+    method: verb,
     headers: body === undefined ? {} : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
     credentials: "same-origin",
@@ -139,7 +140,75 @@ function switchView(name) {
   $("chat-inputbar").classList.toggle("hidden", name !== "chat");
   if (name === "status") { loadStatus(); refreshPushUI(); }
   if (name === "money") loadMoney();
+  if (name === "tasks") loadTasks();
   if (name === "notes" && !$("notes-body").dataset.loaded) browseNotes("vault");
+}
+
+/* ---------- Tasks tab ---------- */
+const TASK_BUCKETS = [
+  ["overdue", "Overdue"], ["today", "Today"], ["soon", "This week"],
+  ["later", "Later"], ["undated", "No date"],
+];
+
+function taskRow(t) {
+  return `<div class="row task-row${t.overdue ? " overdue" : ""}" data-text="${esc(t.text)}">
+    <div class="row-main">
+      <span><span class="check">○</span> ${esc(t.text)}</span>
+    </div>
+    ${t.due || t.tags.length ? `<div class="row-sub">${
+      (t.due ? "📅 " + esc(t.due) : "") +
+      (t.tags.length ? " " + t.tags.map((g) => "#" + esc(g)).join(" ") : "")
+    }</div>` : ""}
+  </div>`;
+}
+
+async function loadTasks() {
+  const el = $("tasks-body");
+  try {
+    const data = await api("/api/tasks");
+    let html = "";
+    for (const [key, label] of TASK_BUCKETS) {
+      const items = data.agenda[key] || [];
+      if (!items.length) continue;
+      html += `<h2>${label}</h2><div class="list">` +
+        items.map(taskRow).join("") + `</div>`;
+    }
+    el.innerHTML = html || `<div class="placeholder small">Nothing on the list.<br>
+      <span class="muted">Add one above, or just tell the agent in Chat.</span></div>`;
+    el.querySelectorAll(".task-row").forEach((r) =>
+      r.addEventListener("click", () => completeTask(r.dataset.text, r)));
+  } catch (e) {
+    if (String(e.message).includes("Not signed in")) return boot();
+    el.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  }
+}
+
+async function completeTask(text, row) {
+  row.classList.add("completing");
+  try {
+    await api("/api/tasks", { match: text, done: true }, "PATCH");
+    await loadTasks();
+  } catch (e) {
+    row.classList.remove("completing");
+    $("tasks-body").insertAdjacentHTML(
+      "afterbegin", `<div class="error">${esc(e.message)}</div>`);
+  }
+}
+
+async function addTask() {
+  const input = $("task-input");
+  const due = $("task-due");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  const dueVal = due.value;
+  due.value = "";
+  try {
+    await api("/api/tasks", { text, due: dueVal || null });
+    await loadTasks();
+  } catch (e) {
+    $("tasks-body").innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  }
 }
 
 /* ---------- Chat tab ---------- */
@@ -519,6 +588,10 @@ document.addEventListener("DOMContentLoaded", () => {
   $("chat-send").addEventListener("click", sendChat);
   $("chat-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); sendChat(); }
+  });
+  $("task-save").addEventListener("click", addTask);
+  $("task-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); addTask(); }
   });
   $("chat-photo").addEventListener("click", () => $("photo-file").click());
   $("photo-file").addEventListener("change", (e) => {

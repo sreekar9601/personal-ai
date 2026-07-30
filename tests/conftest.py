@@ -32,4 +32,18 @@ def sandbox(tmp_path, monkeypatch):
         root / "finance" / "transactions",
     ])
     monkeypatch.setattr(config, "KILL_SWITCH", False)
+
+    # Module-level paths are bound at import time, so patching REPO_ROOT alone
+    # would leave these pointing at the real repo (tests must never read or
+    # write the developer's actual ledger).
+    from agent import finance
+
+    monkeypatch.setattr(
+        finance, "LEDGER_PATH", root / "finance" / "transactions" / "ledger.csv"
+    )
+    monkeypatch.setattr(finance, "IMPORTS_DIR", root / "finance" / "imports")
+    monkeypatch.setattr(
+        finance, "PROCESSED_DIR", root / "finance" / "imports" / "processed"
+    )
+    monkeypatch.setattr(finance, "CATEGORIES_YAML", root / "finance" / "categories.yaml")
     return root
