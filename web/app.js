@@ -651,16 +651,34 @@ async function enablePush() {
   }
 }
 
+/* A visible banner overlaps the desktop's fixed sidebar; publish its height so
+   CSS can shift the layout down by exactly that much. */
+function markBanner(el) {
+  document.body.classList.add("has-banner");
+  const apply = () => document.documentElement.style.setProperty(
+    "--banner-h", `${el.offsetHeight}px`);
+  apply();
+  window.addEventListener("resize", apply);
+}
+
 /* ---------- Boot ---------- */
 async function boot() {
   // iOS install nudge: outside standalone mode, push + the best UX are unavailable.
   const standalone = window.navigator.standalone === true ||
     window.matchMedia("(display-mode: standalone)").matches;
   $("install-banner").classList.toggle("hidden", standalone);
+  if (!standalone) markBanner($("install-banner"));
 
   const me = await api("/api/me");
   const params = new URLSearchParams(location.search);
   const enrollToken = params.get("enroll");
+  if (me.demo) {
+    // Public demo instance: seeded fake data, no passkey involved.
+    $("demo-badge").classList.remove("hidden");
+    $("install-banner").classList.add("hidden");
+    markBanner($("demo-badge"));
+    return enterApp();
+  }
   if (me.authenticated) return enterApp();
   if (!me.enrolled) {
     authScreen("auth-enroll");

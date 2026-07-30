@@ -40,6 +40,15 @@ body {
   text-align: center;
 }
 
+.banner.demo { background: #b45309; font-weight: 600; }
+/* On desktop the nav is position:fixed, so a visible banner must be fixed too
+   and both the nav and content shifted down by its height (set by app.js). */
+@media (min-width: 768px) {
+  body.has-banner .banner { position: fixed; top: 0; left: 0; right: 0; z-index: 10; }
+  body.has-banner #tabbar { top: var(--banner-h, 44px); }
+  body.has-banner #screen-app { padding-top: calc(28px + var(--banner-h, 44px)); }
+}
+
 /* Auth */
 .screen { min-height: 80vh; display: flex; flex-direction: column; }
 #screen-auth { justify-content: center; align-items: center; padding: 24px; }

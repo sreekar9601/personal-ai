@@ -296,6 +296,11 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 def init_runtime() -> None:
     """Shared startup: env checks, volume layout, databases, vault index."""
+    if config.DEMO_MODE:
+        # Re-point every path at a seeded temp tree BEFORE anything reads them.
+        from . import demo
+
+        demo.activate()
     _provider_keys = {
         "anthropic": config.ANTHROPIC_API_KEY,
         "openai": config.OPENAI_API_KEY,

@@ -96,6 +96,11 @@ KILL_SWITCH = _flag("KILL_SWITCH")
 # Without this, startup fails closed — see bootstrap.ensure_environment().
 DEV_MODE = _flag("DEV_MODE")
 
+# Demo mode: serve a seeded throwaway data plane with auth bypassed, for
+# screenshots and public demo links. NEVER set this on your real instance.
+# agent/demo.py re-points the paths above at a temp dir at startup.
+DEMO_MODE = _flag("DEMO_MODE")
+
 # Ceiling on model requests per turn so a runaway tool loop cannot burn budget.
 MAX_TURNS = int(_env("MAX_TURNS", "12"))
 

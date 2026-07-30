@@ -64,8 +64,18 @@ def _rate_limit() -> None:
 
 
 def _session_ok(request: Request) -> None:
+    # Demo instances serve seeded fake data from a temp dir (agent/demo.py) and
+    # are meant to be publicly clickable, so the session gate is bypassed there.
+    if config.DEMO_MODE:
+        return
     if not auth.verify_session(request.cookies.get(auth.SESSION_COOKIE)):
         raise HTTPException(401, "Not signed in.")
+
+
+def _no_demo() -> None:
+    """Guard for routes that must never run on a public demo instance."""
+    if config.DEMO_MODE:
+        raise HTTPException(403, "Disabled in demo mode.")
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
@@ -121,15 +131,19 @@ def build_api() -> FastAPI:
     # --- Auth handshake (unauthenticated, rate-limited) -----------------------
     @app.get("/api/me")
     async def me(request: Request):
+        if config.DEMO_MODE:
+            return {"enrolled": True, "authenticated": True, "demo": True}
         return {
             "enrolled": auth.is_enrolled(),
             "authenticated": auth.verify_session(
                 request.cookies.get(auth.SESSION_COOKIE)
             ),
+            "demo": False,
         }
 
     @app.post("/api/webauthn/register/options")
     async def register_options(body: dict):
+        _no_demo()
         _rate_limit()
         try:
             options = auth.registration_options(body.get("token", ""))
@@ -139,6 +153,7 @@ def build_api() -> FastAPI:
 
     @app.post("/api/webauthn/register/verify")
     async def register_verify(body: dict):
+        _no_demo()
         _rate_limit()
         try:
             session, recovery = auth.registration_verify(
@@ -178,6 +193,7 @@ def build_api() -> FastAPI:
 
     @app.post("/api/webauthn/recover")
     async def recover(body: dict):
+        _no_demo()
         _rate_limit()
         try:
             token = auth.recover(body.get("code", ""))

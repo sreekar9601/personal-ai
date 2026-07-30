@@ -34,6 +34,11 @@ def _git(*args: str) -> subprocess.CompletedProcess:
 
 def ensure_environment() -> None:
     """Prepare the runtime environment or exit loudly. Call before build_app wiring."""
+    if config.DEMO_MODE:
+        # The demo runs on a throwaway temp tree seeded by agent/demo.py: there
+        # is no volume to verify and no real data to protect.
+        log.warning("DEMO_MODE is on — serving seeded fake data, auth bypassed.")
+        return
     _check_access_control()
     if config.DEPLOYED:
         _ensure_volume()

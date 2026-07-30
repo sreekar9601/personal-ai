@@ -35,7 +35,7 @@ def test_status_requires_session(client):
 
 def test_me_is_public_and_reports_state(client):
     body = client.get("/api/me").json()
-    assert body == {"enrolled": False, "authenticated": False}
+    assert body == {"enrolled": False, "authenticated": False, "demo": False}
 
 
 # --- Enrollment --------------------------------------------------------------

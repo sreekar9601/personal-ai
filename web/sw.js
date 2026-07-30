@@ -2,7 +2,7 @@
    never cached — the app is a view over server state (docs/PWA-DESIGN.md §1). */
 "use strict";
 
-const VERSION = "c3-1";
+const VERSION = "c6-1";
 const SHELL = [
   "/",
   "/app.js",
