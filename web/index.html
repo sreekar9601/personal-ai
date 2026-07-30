@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Personal AI">
+  <meta name="apple-mobile-web-app-title" content="Command Center">
   <meta name="theme-color" content="#0f1115">
-  <title>Personal AI</title>
+  <title>Command Center</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/icons/icon-180.png">
   <link rel="stylesheet" href="/style.css">
@@ -23,10 +23,10 @@
   <section id="screen-auth" class="screen hidden">
     <div class="auth-card">
       <img src="/icons/icon-180.png" alt="" class="auth-logo">
-      <h1>Personal AI</h1>
+      <h1>Command Center</h1>
 
       <div id="auth-login" class="hidden">
-        <p class="muted">Your assistant is locked.</p>
+        <p class="muted">Your command center is locked.</p>
         <button id="btn-login" class="primary">Unlock with Face ID</button>
         <button id="btn-show-recover" class="linklike">Lost your passkey?</button>
       </div>
@@ -60,7 +60,10 @@
 
   <!-- App -->
   <main id="screen-app" class="screen hidden">
-    <div id="view-chat" class="view">
+    <div id="view-overview" class="view">
+      <div id="overview-body" class="dash-grid"></div>
+    </div>
+    <div id="view-chat" class="view hidden">
       <div id="chat-log" class="chat-log">
         <div class="placeholder small" id="chat-empty">
           Send a thought to capture it, ask a question,<br>or log an expense.
@@ -106,11 +109,17 @@
   </div>
 
   <nav id="tabbar" class="hidden">
-    <button data-view="chat" class="tab active">💬<span>Chat</span></button>
+    <div class="sidebar-brand">
+      <img src="/icons/icon-192.png" alt="">
+      <span>Command Center</span>
+    </div>
+    <button data-view="overview" class="tab active">📊<span>Overview</span></button>
+    <button data-view="chat" class="tab">💬<span>Chat</span></button>
     <button data-view="money" class="tab">💰<span>Money</span></button>
     <button data-view="tasks" class="tab">✅<span>Tasks</span></button>
     <button data-view="notes" class="tab">📚<span>Notes</span></button>
     <button data-view="status" class="tab">📡<span>Status</span></button>
+    <div class="kbd-hint">1–6 switch views · / focus chat</div>
   </nav>
 
   <script src="/app.js"></script>

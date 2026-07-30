@@ -128,7 +128,7 @@ function enterApp() {
   $("screen-auth").classList.add("hidden");
   $("screen-app").classList.remove("hidden");
   $("tabbar").classList.remove("hidden");
-  switchView("money");
+  switchView("overview");
 }
 
 function switchView(name) {
@@ -138,6 +138,7 @@ function switchView(name) {
     t.classList.toggle("active", t.dataset.view === name)
   );
   $("chat-inputbar").classList.toggle("hidden", name !== "chat");
+  if (name === "overview") loadOverview();
   if (name === "status") { loadStatus(); refreshPushUI(); }
   if (name === "money") loadMoney();
   if (name === "tasks") loadTasks();
@@ -296,6 +297,107 @@ async function sendChat() {
     if (typingEl) { typingEl.remove(); typingEl = null; }
     bubble("assistant error-bubble", esc(e.message || String(e)));
   }
+}
+
+/* ---------- Overview tab (command center home) ---------- */
+function relTime(iso) {
+  const then = new Date(iso);
+  if (isNaN(then)) return "";
+  const mins = Math.round((Date.now() - then.getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  return days === 1 ? "yesterday" : `${days}d ago`;
+}
+
+function panel(title, inner, cls) {
+  return `<section class="panel${cls ? " " + cls : ""}">
+    <h2 class="panel-title">${title}</h2>${inner}</section>`;
+}
+
+async function loadOverview() {
+  const el = $("overview-body");
+  try {
+    const d = await api("/api/bootstrap");
+    const s = d.status;
+    const t = d.finance.totals || {};
+    const spentMonth = Math.abs(t.spent || 0);
+    const budget = s.budget_usd || 0;
+    const pct = budget > 0 ? Math.min(100, Math.round(100 * s.spend_today_usd / budget)) : 0;
+
+    // Today: the three numbers that matter, plus the agent's own cost.
+    const today = `<div class="cards">
+      ${card("Spent today", money(d.spent_today))}
+      ${card("This month", money(spentMonth))}
+      ${card("Tasks", esc(d.tasks.summary.split(" · ")[0]),
+              esc(d.tasks.summary.split(" · ").slice(1).join(" · ")))}
+      ${card("Inbox", `${s.inbox_count}`, "to synthesise")}
+    </div>
+    <div class="meter-row">
+      <div class="meter-label">Agent cost today
+        <span class="muted">$${s.spend_today_usd.toFixed(2)}${budget ? ` / $${budget.toFixed(2)}` : ""}</span>
+      </div>
+      <div class="bar"><div class="bar-fill${pct > 80 ? " hot" : ""}" data-w="${pct}"></div></div>
+    </div>`;
+
+    // Due now: overdue + today, straight from the agenda.
+    const due = [...(d.tasks.agenda.overdue || []), ...(d.tasks.agenda.today || [])];
+    const dueHtml = due.length
+      ? `<div class="list">` + due.map((x) => `
+          <div class="row task-row${x.overdue ? " overdue" : ""}" data-text="${esc(x.text)}">
+            <div class="row-main"><span><span class="check">○</span> ${esc(x.text)}</span></div>
+            ${x.due ? `<div class="row-sub">📅 ${esc(x.due)}</div>` : ""}
+          </div>`).join("") + `</div>`
+      : `<p class="muted small-note">Nothing due. 🎉</p>`;
+
+    // Activity: the proof the agent is doing things on its own.
+    const acts = d.activity || [];
+    const actHtml = acts.length
+      ? `<div class="feed">` + acts.map((a) => `
+          <div class="feed-item${a.ok ? "" : " failed"}">
+            <span class="feed-icon">${a.icon}</span>
+            <div class="feed-body">
+              <div class="feed-title">${esc(a.title)}${
+                a.detail ? ` <span class="muted">— ${esc(a.detail)}</span>` : ""}</div>
+              <div class="feed-ts">${relTime(a.ts)}</div>
+            </div>
+          </div>`).join("") + `</div>`
+      : `<p class="muted small-note">No activity recorded yet.</p>`;
+
+    const health = `<div class="health">
+      <span>${s.kill_switch ? "🛑 kill switch ON" : "🟢 healthy"}</span>
+      <span class="muted">·</span><span class="muted">${
+        s.deployed ? "deployed" : "local"}</span>
+      <span class="muted">·</span><span class="muted">${
+        s.models.default.split(":").pop()}</span>
+      <span class="muted">·</span><span class="muted">sync ${
+        s.last_commit ? esc(relTime_fromGit(s.last_commit)) : "—"}</span>
+    </div>`;
+
+    el.innerHTML =
+      panel("Today", today, "wide") +
+      panel("Due now", dueHtml) +
+      panel("Agent activity", actHtml, "tall") +
+      panel("System", health, "wide");
+    el.querySelectorAll(".bar-fill").forEach((b) => { b.style.width = b.dataset.w + "%"; });
+    el.querySelectorAll(".task-row").forEach((r) =>
+      r.addEventListener("click", async () => {
+        r.classList.add("completing");
+        try { await api("/api/tasks", { match: r.dataset.text, done: true }, "PATCH"); }
+        finally { loadOverview(); }
+      }));
+  } catch (e) {
+    if (String(e.message).includes("Not signed in")) return boot();
+    el.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  }
+}
+
+// git's "(3 hours ago)" suffix is already human — reuse it when present.
+function relTime_fromGit(commitLine) {
+  const m = commitLine.match(/\(([^)]+)\)\s*$/);
+  return m ? m[1] : commitLine.slice(0, 20);
 }
 
 /* ---------- Money tab ---------- */
@@ -601,6 +703,21 @@ document.addEventListener("DOMContentLoaded", () => {
   $("notes-search").addEventListener("input", (e) => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => searchNotes(e.target.value), 250);
+  });
+  // Desktop keyboard affordances: digits switch views, "/" jumps to chat.
+  const VIEW_KEYS = ["overview", "chat", "money", "tasks", "notes", "status"];
+  document.addEventListener("keydown", (e) => {
+    if ($("screen-app").classList.contains("hidden")) return;
+    const typing = ["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName);
+    if (e.key === "/" && !typing) {
+      e.preventDefault();
+      switchView("chat");
+      $("chat-input").focus();
+      return;
+    }
+    if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+    const idx = parseInt(e.key, 10) - 1;
+    if (idx >= 0 && idx < VIEW_KEYS.length) switchView(VIEW_KEYS[idx]);
   });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");
   boot().catch((e) => showError(e.message || String(e)));

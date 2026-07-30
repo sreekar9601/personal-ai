@@ -41,7 +41,7 @@ from agent import config
 
 log = logging.getLogger("personal-ai.auth")
 
-RP_NAME = "Personal AI"
+RP_NAME = "Command Center"
 _USER_ID = b"personal-ai-owner"
 SESSION_COOKIE = "pai_session"
 SESSION_TTL_S = 30 * 24 * 3600  # sliding 30 days

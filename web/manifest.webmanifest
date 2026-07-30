@@ -1,15 +1,28 @@
 {
-  "name": "Personal AI",
-  "short_name": "Personal AI",
-  "description": "Your private assistant: capture, money, tasks, notes.",
+  "name": "Personal Agentic Command Center",
+  "short_name": "Command Center",
+  "description": "Your private agentic command center: capture, money, tasks, notes.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#0f1115",
   "theme_color": "#0f1115",
   "icons": [
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

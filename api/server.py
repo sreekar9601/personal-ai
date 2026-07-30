@@ -20,7 +20,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Respon
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from agent import config, finance, gitsync, memory, providers, retrieval, spend
+from agent import activity, config, finance, gitsync, memory, providers, retrieval, spend
 from agent import loop as agent_loop
 from agent import tasks as tasks_store
 from agent.hooks import PathNotAllowed, resolve_in_repo
@@ -199,13 +199,31 @@ def build_api() -> FastAPI:
 
     @app.get("/api/bootstrap", dependencies=[Depends(_session_ok)])
     async def bootstrap_data():
-        """One call on app open: everything the tabs need to first-paint."""
+        """One call on app open: everything the Overview needs to first-paint."""
         month = date.today().strftime("%Y-%m")
         try:
             summary = finance.summary(month)
         except Exception:  # empty/absent ledger must not blank the app
             summary = {"period": month, "by_category": [], "totals": {}}
-        return {"status": status_payload(), "finance": summary, "month": month}
+        try:
+            today_spend = finance.query(
+                "SELECT ROUND(SUM(CASE WHEN amount<0 THEN -amount ELSE 0 END),2) AS spent"
+                f" FROM ledger WHERE CAST(date AS VARCHAR) = '{date.today().isoformat()}'"
+            )
+            spent_today = (today_spend[0].get("spent") if today_spend else 0) or 0
+        except Exception:
+            spent_today = 0
+        return {
+            "status": status_payload(),
+            "finance": summary,
+            "month": month,
+            "spent_today": spent_today,
+            "tasks": {
+                "summary": tasks_store.summary_line(),
+                "agenda": tasks_store.agenda(),
+            },
+            "activity": activity.recent(12),
+        }
 
     @app.get("/api/finance/summary", dependencies=[Depends(_session_ok)])
     async def finance_summary(month: str | None = None):
@@ -336,6 +354,10 @@ def build_api() -> FastAPI:
             log.exception("pwa resume failed")
             raise HTTPException(500, f"{type(e).__name__}: {e}")
         return _result_event(result, tier)
+
+    @app.get("/api/activity", dependencies=[Depends(_session_ok)])
+    async def get_activity(limit: int = 25):
+        return {"events": activity.recent(limit)}
 
     # --- Tasks (slice C1) -------------------------------------------------------------
     @app.get("/api/tasks", dependencies=[Depends(_session_ok)])

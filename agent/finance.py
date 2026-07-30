@@ -260,7 +260,7 @@ def query(sql: str, limit: int = 100) -> list[dict]:
     stripped = sql.strip().rstrip(";").lstrip()
     if ";" in stripped:
         raise FinanceError("Only a single statement is allowed.")
-    if not stripped[:6].lower() in ("select",) and not stripped[:4].lower() == "with":
+    if stripped[:6].lower() != "select" and stripped[:4].lower() != "with":
         raise FinanceError("Only SELECT/WITH (read-only) queries are allowed.")
     con = _ledger_con()
     try:

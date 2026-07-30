@@ -15,7 +15,11 @@ from datetime import datetime, timezone
 
 from . import config
 
-AUDIT_LOG = config.DATA_DIR / "audit.log"
+def _log_path():
+    """Resolved per call, not at import: config.DATA_DIR moves between local,
+    deployed (volume), and test layouts, and a stale bound path would write the
+    audit trail to the wrong place."""
+    return config.DATA_DIR / "audit.log"
 
 
 def record(tool: str, args: dict | str, status: str, session_id: str | None = None) -> None:
@@ -33,8 +37,9 @@ def record(tool: str, args: dict | str, status: str, session_id: str | None = No
             "status": status,
             "args": safe_args,
         }, default=str)
-        config.DATA_DIR.mkdir(exist_ok=True)
-        with open(AUDIT_LOG, "a") as f:
+        path = _log_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a") as f:
             f.write(line + "\n")
     except Exception:  # pragma: no cover - auditing is best-effort
         pass
