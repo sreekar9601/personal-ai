@@ -33,9 +33,9 @@ from . import (
     config,
     finance,
     gitsync,
-    jobs,
     loop,
     memory,
+    pipeline,
     providers,
     reflect,
     retrieval,
@@ -142,21 +142,21 @@ async def on_spec(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await _deliver(update, result, tier="strong")
 
 
-async def on_job(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+async def on_track(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not _authorized(update):
         return
     text = " ".join(ctx.args) if ctx.args else ""
     if not text:
         await update.effective_message.reply_text(
-            "Usage: /job <posting, status update, or question>\n"
-            "e.g. /job applied to Acme as Staff Eng — link …"
+            "Usage: /track <opportunity, status update, or question>\n"
+            "e.g. /track talked to Acme about the platform role — link …"
         )
         return
     await ctx.bot.send_chat_action(update.effective_chat.id, "typing")
     try:
-        result = await jobs.track(_session_id(update), text)
+        result = await pipeline.track(_session_id(update), text)
     except Exception as e:
-        log.exception("job failed")
+        log.exception("pipeline track failed")
         await update.effective_message.reply_text(f"⚠️ {type(e).__name__}: {e}")
         return
     await _deliver(update, result, tier="strong")
@@ -327,7 +327,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("start", on_start))
     app.add_handler(CommandHandler("spec", on_spec))
     app.add_handler(CommandHandler("synthesize", on_synthesize))
-    app.add_handler(CommandHandler("job", on_job))
+    app.add_handler(CommandHandler("track", on_track))
     app.add_handler(CommandHandler("import", on_import))
     app.add_handler(CommandHandler("finance", on_finance))
     app.add_handler(CommandHandler("briefing", on_briefing))

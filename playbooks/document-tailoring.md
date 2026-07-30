@@ -1,5 +1,5 @@
 ---
-when_to_use: Tailoring a resume or cover letter to a specific role. Triggered from /job when asked to tailor.
+when_to_use: Tailoring a long-form document to a specific audience or opportunity. Triggered from /track when asked to tailor.
 tier: strong
 ---
 # Resume / cover-letter tailoring playbook

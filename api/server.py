@@ -110,7 +110,7 @@ def status_payload() -> dict:
 
 
 def build_api() -> FastAPI:
-    app = FastAPI(title="personal-ai", docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(title="command-center", docs_url=None, redoc_url=None, openapi_url=None)
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):

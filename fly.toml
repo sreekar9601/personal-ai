@@ -1,4 +1,4 @@
-# Fly.io deployment for the personal-ai service.
+# Fly.io deployment for the Command Center.
 # `fly launch --no-deploy` to create the app, set secrets, then `fly deploy`.
 #
 #   fly secrets set TELEGRAM_BOT_TOKEN=... ANTHROPIC_API_KEY=... \
@@ -8,6 +8,9 @@
 # outward; the PWA (Phase 10) is served on the public HTTPS port, gated by
 # passkey auth (api/auth.py). Set PWA_ORIGIN to this app's public URL.
 
+# DO NOT RENAME: this is the deployed Fly app (and its hostname). Changing
+# it points deploys at a non-existent app and breaks PWA_ORIGIN, which
+# passkeys are bound to. The repo name and the app name are independent.
 app = "personal-ai"
 primary_region = "iad"
 

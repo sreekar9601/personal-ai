@@ -27,7 +27,9 @@ from agent import config
 
 log = logging.getLogger("personal-ai.push")
 
-VAPID_SUB = "mailto:owner@personal-ai.local"
+# Contact address in the VAPID claims. Subscriptions bind to the VAPID
+# *public key*, not this value, so it is safe to change.
+VAPID_SUB = "mailto:owner@command-center.local"
 _KEY_FILE = "vapid_private.pem"
 
 
@@ -108,7 +110,7 @@ def subscription_count() -> int:
 
 
 # --- Sending ------------------------------------------------------------------------
-def send_to_all(title: str, body: str, tag: str = "personal-ai") -> int:
+def send_to_all(title: str, body: str, tag: str = "command-center") -> int:
     """Push a notification to every subscription. Returns how many succeeded.
     Never raises; dead subscriptions are pruned."""
     try:

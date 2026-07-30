@@ -1,7 +1,7 @@
 [project]
-name = "personal-ai"
+name = "agentic-command-center"
 version = "0.1.0"
-description = "A single personal agent over one git-backed knowledge repo, reachable via Telegram."
+description = "Personal Agentic Command Center — a self-hosted AI agent with an iPhone app and desktop dashboard over a git-backed data plane."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

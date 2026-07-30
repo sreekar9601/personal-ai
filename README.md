@@ -1,162 +1,183 @@
-# personal-ai
+<div align="center">
 
-A single personal agent over one git-backed knowledge repo, reachable from your
-phone as an **installable iPhone app (PWA)** locked with Face ID — with an
-optional Telegram bot as a second surface. Model-agnostic (Pydantic AI),
-Obsidian as the editing surface.
+# Personal Agentic Command Center
 
-It captures ideas, synthesises them into a personal wiki, logs expenses from a
-sentence or a receipt photo, tracks a job search, answers questions about your
-spending, briefs you each morning (Telegram + lock-screen push), and improves
-its own playbooks — all over plain files in one git repo, with approval-gated
-writes.
+**A self-hosted AI agent I actually use every day — reachable as an installed
+iPhone app and a desktop dashboard, over a git-backed personal data plane.**
 
-**Build phases (all shipped):**
+One brain (tool-using LLM agent with human-in-the-loop approvals) · three
+surfaces · zero SaaS. Passkey-locked, budget-capped, self-improving.
 
-| Phase | What it adds |
+[![CI](https://github.com/sreekar9601/personal-ai/actions/workflows/deploy.yml/badge.svg)](https://github.com/sreekar9601/personal-ai/actions/workflows/deploy.yml)
+![tests](https://img.shields.io/badge/tests-112%20passing-brightgreen)
+![python](https://img.shields.io/badge/python-3.12-blue)
+![license](https://img.shields.io/badge/license-MIT-informational)
+
+<img src="docs/media/desktop-overview.png" alt="Desktop dashboard" width="100%">
+
+<img src="docs/media/phone-overview.png" alt="iPhone app — overview" width="31%">
+<img src="docs/media/phone-tasks.png" alt="iPhone app — tasks" width="31%">
+<img src="docs/media/phone-money.png" alt="iPhone app — money" width="31%">
+
+</div>
+
+---
+
+## What it does
+
+Text it a sentence and the right thing happens — no forms, no app-switching:
+
+| You say | It does |
 |---|---|
-| 0 — core | Capture + spec writing, approval-gated writes, SQLite+FTS memory, tier-routed models, git as sync. |
-| 1 — knowledge engine | Wiki **synthesis loop**, **keyword retrieval** (FTS over the vault), active **memory layer**. |
-| 2 — job search | File-based CRM + application tracker, resume/cover tailoring. |
-| 3 — finance | CSV import → categorised ledger → **DuckDB** spending queries. |
-| 4 — proactive | Scheduled nightly synthesis + a morning **briefing** on Telegram. |
-| 5 — self-improvement | A **reflection loop** that writes its own reusable skills. |
-| 6 — hardening | Content guards, an audit trail, and a pytest suite. |
-| 10 — phone app | Installable **PWA**: passkey (Face ID) auth, chat + approvals, money dashboard, notes browser, receipt-photo capture, Web Push. |
+| *"spent 450 on groceries at BigBasket"* | Validates and appends a categorised ledger row; the Money tab updates |
+| 📷 *a receipt photo* | Reads it with vision, extracts total/merchant/date, logs the expense |
+| *"remind me to renew my passport by August"* | Adds a dated task to `vault/tasks.md` |
+| *"idea: a weekly newsletter about what I shipped"* | Files a capture; the nightly loop folds it into a cross-linked wiki |
+| *"what did I spend on dining last month?"* | Answers from the ledger with SQL, not guesswork |
+| *(nothing — 7:30am)* | Pushes a briefing to your lock screen: what's overdue, yesterday's spend, inbox depth |
 
-## Quickstart
+## Why it's interesting (engineering)
 
-1. **Install deps** (uv manages Python 3.12):
-   ```bash
-   uv sync
-   ```
-2. **Configure secrets:**
-   ```bash
-   cp .env.example .env
-   ```
-   Fill in `.env`:
-   - `TELEGRAM_BOT_TOKEN` — from [@BotFather](https://t.me/BotFather).
-   - `TELEGRAM_ALLOWED_USER_IDS` — your numeric id from
-     [@userinfobot](https://t.me/userinfobot). **Set this** or the bot is open.
-   - `ANTHROPIC_API_KEY` — pay-as-you-go key; set a spend cap in the console.
-3. **Run:**
-   ```bash
-   uv run python -m agent.main
-   ```
-4. **Use it from Telegram** — send any text to capture it (questions get answered,
-   grounded in the vault), or use a command:
+- **Genuinely agentic**: tool use with **human-in-the-loop approvals** —
+  irreversible writes suspend the turn, persist their state, and resume on your
+  tap from *either* surface.
+- **Self-improving, with a hard boundary**: a weekly reflection loop rewrites its
+  own `skills/` and `playbooks/` autonomously, but `agent/` source sits outside
+  the write allowlist — behaviour evolves, capability stays reviewed.
+- **Judgement in the model, determinism in code**: the LLM supplies fields;
+  tested Python validates, signs, de-dupes, and writes. Money is never
+  "generated".
+- **Cost as a design constraint**: three model tiers, prompt caching, bounded
+  history, per-model token accounting, and a daily budget guard that declines
+  politely instead of surprising you. Runs at roughly $10–30/month all-in.
+- **Git as the database**: every action is a commit — audit trail, backup, and
+  desktop sync in one. The vault opens directly in Obsidian.
+- **Security-first**: WebAuthn passkeys, strict CSP, path-traversal-guarded file
+  APIs, secret-pattern write refusal, and a one-flag kill switch.
 
-   | Command | Does |
-   |---|---|
-   | `/spec <idea>` | Write a full spec to `vault/01-projects/` (strong tier). |
-   | `/synthesize` | Fold inbox captures into the `vault/03-resources/` wiki. |
-   | `/job <text>` | Track an application / status / prep in the CRM. |
-   | `/import` | Import new CSVs from `finance/imports/` into the ledger. |
-   | `/finance [YYYY-MM]` | Spending summary by category. |
-   | `/briefing` | The morning briefing on demand. |
-   | `/reflect` | Run a self-improvement pass over recent activity. |
+📐 **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — system diagram, the life of
+a single turn, module map, security and cost models.
 
-   Writes outside `vault/ skills/ playbooks/ memory/ finance/transactions/`
-   trigger an Approve/Deny button — that's the safety gate, not a bug.
+## Stack
 
-## How it works
+`Python 3.12` · `Pydantic AI` (model-agnostic agent) · `FastAPI` + SSE ·
+`WebAuthn` passkeys · `SQLite` FTS5 · `DuckDB` (ledger analytics) ·
+`Web Push` (VAPID) · `APScheduler` · vanilla-JS PWA · `Fly.io` ·
+`GitHub Actions`
 
-- **Knowledge engine (Phase 1).** `/synthesize` runs the "Karpathy loop": it
-  folds raw captures into a small, durable wiki — one page per *topic*, merged
-  and cross-linked, never deleted (processed captures move to `vault/04-archive/`).
-  Every markdown file in `vault/` is indexed in SQLite FTS5; the `vault_search`
-  tool grounds answers in what's written. `memory/USER.md` + `memory/MEMORY.md`
-  ride in every prompt, and the agent grows `MEMORY.md` via the `remember` tool.
-- **Job search (Phase 2).** The vault is the CRM: `vault/crm/applications.md` is
-  a pipeline table, `vault/crm/<company>.md` a page each. Resume/cover tailoring
-  works strictly from your real master resume — no fabrication.
-- **Finance (Phase 3).** Drop bank/card CSVs in `finance/imports/` and `/import`:
-  columns are detected, amounts normalised (spend<0, income>0), transactions
-  categorised by `finance/categories.yaml` rules and de-duped into
-  `finance/transactions/ledger.csv`. The `finance_query` tool answers money
-  questions with read-only DuckDB SQL. Raw exports never enter git.
-- **Proactive (Phase 4).** The scheduler runs a nightly synthesis pass and a
-  morning briefing (inbox backlog, job next-actions, month-to-date spend) pushed
-  to Telegram. Configure with `PROACTIVE_ENABLED` / `*_HOUR` in `.env`.
-- **Self-improvement (Phase 5).** `/reflect` reviews recent activity and writes
-  one reusable skill into `skills/` (or sharpens a playbook). It can touch
-  `skills/` and `playbooks/` but never `agent/` code — that stays PR-gated.
+## The surfaces
 
-## Editing the vault
+**iPhone app (PWA)** — installed to the home screen, unlocked with Face ID.
+Chat capture, 📷 receipts, keyboard-mic dictation, tasks, money, notes, and
+lock-screen push. No App Store, no developer account.
 
-Open the `vault/` folder (not the repo root) as an Obsidian vault. Install the
-Obsidian Git plugin to pull the agent's commits to your desktop.
+**Desktop dashboard** — the same app at ≥768px: sidebar nav, two-column panel
+grid, `1`–`6` / `/` keyboard navigation.
 
-## Switching models / providers
+<div align="center">
+<img src="docs/media/desktop-money.png" alt="Money dashboard" width="49%">
+<img src="docs/media/desktop-notes.png" alt="Notes browser" width="49%">
+</div>
 
-Edit `agent/models.yaml` — change `provider` and the three tier model strings.
-No Python changes. (Set the matching provider API key in `.env`.)
+**Telegram (optional)** — a second transport over the same brain; leave
+`TELEGRAM_BOT_TOKEN` unset to run app-only.
 
-## Safety model
+## Try it locally
 
-- **Kill switch:** `KILL_SWITCH=true` disables all writes + git push.
-- **Fail-closed access:** startup aborts if `TELEGRAM_ALLOWED_USER_IDS` is empty
-  (set `DEV_MODE=true` to deliberately run open, local dev only).
-- **Daily budget:** `DAILY_BUDGET_USD` caps estimated model spend per day
-  (pricing in `agent/models.yaml`); the bot declines politely once it's hit.
-- **Approval gate:** writes outside the allowlist need a Telegram confirmation.
-  Pending approvals are persisted, so they survive a restart.
-- **Path safety:** any path escaping the repo root is refused.
-- **Content guards (Phase 6):** oversized writes and private-key material are
-  refused outright, even inside the auto-approve zone.
-- **Read-only finance:** `finance_query` rejects anything but a single SELECT/WITH.
-- **Audit:** every turn commits knowledge changes to git and logs to
-  `vault/log.md`; side-effectful tool calls also append to `.data/audit.log`.
+```bash
+uv sync
+cp .env.example .env          # add ANTHROPIC_API_KEY
+DEMO_MODE=true uv run python -m agent.main
+```
 
-## The phone app (PWA)
+Open http://localhost:8080 — **demo mode** serves a seeded fake data plane from
+a temp directory with auth bypassed, so you can click through everything without
+configuring anything. (Never set `DEMO_MODE` on a real instance.)
 
-The app is served by the same process on the public HTTPS port, gated by a
-single-user passkey (docs/PWA-DESIGN.md). To get it on your iPhone:
-
-1. Deploy (below), with `PWA_ORIGIN` set to your app's public URL — passkeys
-   bind to this domain, so it must match what you open in Safari.
-2. Open that URL in Safari → **Share → Add to Home Screen**.
-3. Open the installed app. First run: paste the **enrollment token** from the
-   server log (`fly logs | grep enroll`) and create your passkey (Face ID).
-   Save the recovery code it shows you — it re-opens enrollment if you lose
-   the phone.
-4. In the **Status** tab, tap **Enable notifications** to get the morning
-   briefing and weekly reflection on your lock screen (E2E-encrypted push).
-
-Daily use: **Chat** to capture thoughts, ask questions, and log expenses
-("spent 450 on groceries at BigBasket"); 📷 for receipts (read by vision →
-ledger); the keyboard mic key for voice; **Money** for the live dashboard;
-**Notes** to browse/search the wiki; approvals appear as in-chat cards (the
-same approval can also be decided from Telegram — one store).
+For real use, drop `DEMO_MODE` and fill in `.env` (see `.env.example`).
 
 ## Deploy (Fly.io)
 
-See `PLAN.md` §9 for the full path. Short version: the volume at `/data` holds
-a git clone of this repo (the knowledge) plus sqlite; `agent/bootstrap.py`
-clones it on first boot and pulls on later boots. One-time setup:
+One machine, one process, one volume. The volume holds a git clone of this repo
+(your knowledge) plus SQLite, so redeploys keep every byte.
 
 ```bash
 fly launch --no-deploy
-fly volumes create personal_ai_data --size 1 --region iad
+fly volumes create personal_ai_data --size 1
 fly secrets set \
     ANTHROPIC_API_KEY=... DAILY_BUDGET_USD=5 \
-    GIT_REMOTE_URL=git@github.com:<you>/personal-ai.git \
+    GIT_REMOTE_URL=git@github.com:<you>/<repo>.git \
     GIT_SSH_KEY="$(cat deploy_key)"
-# fly.toml: set PWA_ORIGIN to this app's public URL (https://<app>.fly.dev)
-# Optional Telegram surface: also set TELEGRAM_BOT_TOKEN + TELEGRAM_ALLOWED_USER_IDS
+# fly.toml: set PWA_ORIGIN to this app's public URL (passkeys bind to it)
+# Optional Telegram: also set TELEGRAM_BOT_TOKEN + TELEGRAM_ALLOWED_USER_IDS
 fly tokens create deploy | gh secret set FLY_API_TOKEN   # merge -> auto-deploy
-fly deploy                                               # first deploy only
+fly deploy                                              # first deploy only
 ```
 
-After that, every merge to `main` tests and deploys itself
-(`.github/workflows/deploy.yml`). `/status` in Telegram shows uptime, spend
-vs. budget, inbox size, and the last knowledge commit.
+Then, on the phone: open the URL in Safari → **Share → Add to Home Screen** →
+open it → paste the enrollment token from `fly logs | grep enroll` → create your
+passkey → save the recovery code → **Status → Enable notifications**.
+
+After that, every merge to `main` tests and deploys itself.
+
+## Safety model
+
+- **Passkey-only access** (WebAuthn/Face ID); enrollment closes after first use,
+  with a one-time recovery code for a lost phone.
+- **Fail-closed startup**: the Telegram surface refuses to run with an empty
+  allowlist unless `DEV_MODE=true`.
+- **Approval gate**: writes outside `vault/ skills/ playbooks/ memory/
+  finance/transactions/` need your tap, and survive a restart.
+- **Path safety**: any path escaping the repo root is refused; the notes API
+  re-checks containment after resolution.
+- **Content guards**: oversized writes and private-key material are refused.
+- **Read-only finance queries**: single `SELECT`/`WITH` statements only.
+- **Budget guard**: `DAILY_BUDGET_USD` caps estimated spend per day.
+- **Kill switch**: `KILL_SWITCH=true` disables every side effect at once.
+- **Audit**: git commits + `vault/log.md` + `.data/audit.log`.
+
+## Editing the vault
+
+Open `vault/` (not the repo root) as an Obsidian vault; the Git plugin pulls the
+agent's commits to your desktop. Notes, tasks, and the ledger are plain
+markdown/CSV — readable in 30 years, with or without this app.
 
 ## Tests
 
 ```bash
-uv run --group dev pytest
+uv run --group dev pytest    # 112 tests, no network or model calls
 ```
 
-Covers path safety + content guards, vault retrieval, the memory layer, finance
-import/categorisation/query guards, and the briefing — no network or model calls.
+Covers path safety and content guards, the approval gate, ledger
+import/categorisation/query guards, the task store, retrieval, the activity
+feed, spend accounting and the budget guard, WebAuthn session handling,
+demo-mode isolation, and the API surface.
+
+## Switching models / providers
+
+Edit `agent/models.yaml` — `provider` plus three tier strings and their prices.
+No Python changes.
+
+## Build history
+
+| Phase | What it added |
+|---|---|
+| 0 — core | Capture + spec writing, approval-gated writes, SQLite+FTS memory, tier-routed models, git as sync |
+| 1 — knowledge engine | Wiki **synthesis loop**, keyword retrieval over the vault, active memory layer |
+| 2 — contacts & pipelines | File-based CRM: people, organisations, and a status tracker with next actions |
+| 3 — finance | CSV import → categorised ledger → DuckDB spending queries |
+| 4 — proactive | Nightly synthesis + morning briefing on a scheduler |
+| 5 — self-improvement | A reflection loop that writes its own reusable skills |
+| 6 — hardening | Content guards, an audit trail, a pytest suite |
+| 7 — durability | Volume-backed data plane, fail-closed auth, persistent approvals, budget guard, CI/CD |
+| 8 — the phone app | Installable PWA: passkey auth, chat + approvals, receipts, Web Push |
+| 9 — command center | Tasks, activity feed, Overview home, desktop dashboard, demo mode |
+
+Plans live in [`PLAN.md`](PLAN.md), [`docs/PWA-DESIGN.md`](docs/PWA-DESIGN.md),
+and [`docs/COMMAND-CENTER.md`](docs/COMMAND-CENTER.md).
+
+---
+
+<sub>Built with AI assistance; architected, reviewed, and operated by me. It runs
+24/7 and commits its own morning briefings — the git history is the uptime
+log.</sub>

@@ -35,7 +35,7 @@ from .tools import vault as vault_tools
 try:
     import logfire
 
-    logfire.configure(send_to_logfire="if-token-present", service_name="personal-ai")
+    logfire.configure(send_to_logfire="if-token-present", service_name="command-center")
     logfire.instrument_pydantic_ai()
     _LOGFIRE = True
 except Exception:  # pragma: no cover - logfire is best-effort

@@ -1,7 +1,7 @@
-# Command Center Plan — framing this project for the resume
+# Command Center Plan — framing this project as a portfolio piece
 
 *Goal: present (and finish) this repo as a **Personal Agentic Command Center**
-— one agent brain, reachable as an installed iPhone app and a desktop web
+— a public portfolio piece: one agent brain, reachable as an installed iPhone app and a desktop web
 dashboard, over a git-backed personal data plane. Three workstreams: product,
 presentation (README/repo), and code. Written 2026-07-29.*
 
@@ -9,7 +9,7 @@ presentation (README/repo), and code. Written 2026-07-29.*
 
 ## 0. The story we are selling (get this straight first)
 
-A resume project is judged in ~90 seconds: repo title → README hero →
+A portfolio project is judged in ~90 seconds: repo title → README hero →
 screenshots → architecture diagram → code skim. The narrative that survives
 that skim:
 
@@ -68,14 +68,14 @@ last "coming soon" in the UI.
 ### 1.4 Demo mode (show it without doxxing yourself)
 `DEMO_MODE=true`: seeds a plausible fake vault/ledger/tasks in a temp dir,
 auth bypassed with a visible "DEMO" badge, all writes to the real repo
-disabled. Purpose: screenshots, the README GIF, and a live link a recruiter
+disabled. Purpose: screenshots, the README GIF, and a live link anyone
 can click without touching your data. (Deploy as a second tiny Fly app, or
 run locally just to capture media.)
 
 ### 1.5 Branding
 Display name: **"Command Center"** (manifest short_name), README title
 **Personal Agentic Command Center**. Keep the repo slug `personal-ai` or
-rename to `agentic-command-center` — renaming reads better on a resume line;
+rename to `agentic-command-center` — renaming reads better as a project title;
 GitHub redirects old URLs, but update `GIT_REMOTE_URL` on Fly if renamed.
 **Decision needed (yours).**
 
@@ -93,7 +93,7 @@ Rewrite README top-down for the 90-second skim:
    (tools, approval gate, budget guard) → git data plane → Anthropic/GitHub;
    scheduler + reflection loop as side rails.
 4. **Feature grid** (6–8 cells, one line each): agentic core, HITL approvals,
-   passkey auth, finance pipeline, knowledge engine, proactive jobs,
+   passkey auth, finance pipeline, knowledge engine, proactive scheduling,
    self-improvement, cost engineering.
 5. **Security model** and **Cost engineering** as first-class sections
    (they're differentiators, not footnotes).
@@ -108,11 +108,11 @@ Repo hygiene for scrutiny:
   preview image = the hero screenshot.
 - `docs/ARCHITECTURE.md`: the diagram plus a written tour (request lifecycle
   of one chat turn incl. approval + spend accounting; the git data plane;
-  the two self-improvement channels). Interviewers click exactly one doc —
+  the two self-improvement channels). A technical reader clicks exactly one doc —
   make it this one.
 - Screenshots/GIF under `docs/media/` (captured in demo mode).
 
-**Resume bullets this supports** (tune numbers at capture time):
+**Summary lines this supports** (tune numbers at capture time):
 - *Built and operate a self-hosted agentic AI system (“Personal Agentic
   Command Center”): a tool-using LLM agent with human-in-the-loop approvals,
   serving an installed iOS PWA + desktop dashboard from one FastAPI/Python
@@ -139,7 +139,7 @@ Repo hygiene for scrutiny:
 | C5 | **Branding** | Manifest/app title "Command Center", icon refresh, login screen copy | ~¼ day |
 | C6 | **Demo mode** | `DEMO_MODE`: seeded fake data plane in temp dir, auth bypass + DEMO badge, writes to real repo hard-disabled | ~½–1 day |
 | C7 | **README + docs** | Hero README rewrite, `docs/ARCHITECTURE.md`, mermaid diagrams, LICENSE, badges; capture screenshots + GIF in demo mode | ~1 day |
-| C8 | **Repo meta** | Description/topics/social image/pin; optional repo rename (decision §1.5); resume bullets finalized with real numbers | ~¼ day |
+| C8 | **Repo meta** | Description/topics/social image/pin; optional repo rename (decision §1.5); summary lines finalized with real numbers | ~¼ day |
 
 Sequencing logic: C1–C4 make the product match the claim (no placeholder
 tabs, real desktop dashboard), C5–C6 make it photogenic and safely shareable,
@@ -148,5 +148,5 @@ new services, no new costs.
 
 **Definition of done**: a stranger opening the repo sees the hero screenshot
 of a dashboard they can click into (demo link), an architecture diagram they
-can follow, and a green CI badge; you get 3–4 defensible resume bullets and
+can follow, and a green CI badge; you get 3–4 defensible summary lines and
 an app whose every tab works.

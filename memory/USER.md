@@ -4,7 +4,7 @@
 > this is injected into every prompt, so it should be durable facts, not a diary.
 
 - **Name:** (fill in)
-- **What I'm focused on right now:** (e.g. job search, a side project, finances)
+- **What I'm focused on right now:** (e.g. a side project, finances, learning)
 - **Communication style I want from you:** brief, direct, no flattery.
 - **Time zone:** (fill in)
 

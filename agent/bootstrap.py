@@ -22,8 +22,8 @@ from . import config
 
 log = logging.getLogger("personal-ai.bootstrap")
 
-_GIT_IDENTITY_NAME = "personal-ai"
-_GIT_IDENTITY_EMAIL = "personal-ai@localhost"
+_GIT_IDENTITY_NAME = "command-center"
+_GIT_IDENTITY_EMAIL = "command-center@localhost"
 
 
 def _git(*args: str) -> subprocess.CompletedProcess:

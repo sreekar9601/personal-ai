@@ -23,9 +23,9 @@ def _inbox_count() -> int:
     return len(list(inbox.glob("*.md"))) if inbox.is_dir() else 0
 
 
-def _job_next_actions() -> list[str]:
-    """Active applications with their next action, parsed from the CRM tracker."""
-    path = config.VAULT_DIR / "crm" / "applications.md"
+def _pipeline_next_actions() -> list[str]:
+    """Active pipeline rows with their next action, parsed from the CRM tracker."""
+    path = config.VAULT_DIR / "crm" / "pipeline.md"
     if not path.exists():
         return []
     out: list[str] = []
@@ -75,9 +75,9 @@ def build() -> str:
     if inbox:
         lines.append(f"- 📥 {inbox} note(s) in the inbox awaiting synthesis (/synthesize).")
 
-    actions = _job_next_actions()
+    actions = _pipeline_next_actions()
     if actions:
-        lines.append("- 💼 Job next actions:")
+        lines.append("- 💼 Pipeline next actions:")
         lines.extend(f"    - {a}" for a in actions)
 
     fin = _finance_line()

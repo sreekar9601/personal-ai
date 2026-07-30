@@ -1,14 +1,14 @@
 ---
-when_to_use: Tracking job applications, companies, and interview prep. Triggered by /job.
+when_to_use: Tracking opportunities, organisations, and prep for upcoming conversations. Triggered by /track.
 tier: strong
 ---
-# Job-search playbook
+# Opportunity pipeline playbook
 
 The vault is your CRM. Keep two things accurate: the **application tracker** and a
 **page per company**. Never invent facts about a posting — record only what's in
 the message or already in the vault.
 
-## The application tracker — `vault/crm/applications.md`
+## The application tracker — `vault/crm/pipeline.md`
 A single markdown table, newest first. Columns and the allowed statuses:
 
 ```

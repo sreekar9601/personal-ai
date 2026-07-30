@@ -6,8 +6,8 @@ from datetime import date
 from agent import briefing
 
 
-def test_job_next_actions_excludes_terminal(sandbox):
-    (sandbox / "vault" / "crm" / "applications.md").write_text(
+def test_pipeline_next_actions_excludes_terminal(sandbox):
+    (sandbox / "vault" / "crm" / "pipeline.md").write_text(
         "# Job applications\n\n"
         "| Company | Role | Status | Applied | Next action | Link |\n"
         "|---|---|---|---|---|---|\n"
@@ -15,7 +15,7 @@ def test_job_next_actions_excludes_terminal(sandbox):
         "| Globex | SRE | interview | 2026-06-20 | prep sys design | |\n"
         "| Initech | Dev | rejected | 2026-06-10 | — | |\n"
     )
-    actions = briefing._job_next_actions()
+    actions = briefing._pipeline_next_actions()
     assert any("Acme" in a for a in actions)
     assert any("Globex" in a for a in actions)
     assert not any("Initech" in a for a in actions)  # terminal status excluded
